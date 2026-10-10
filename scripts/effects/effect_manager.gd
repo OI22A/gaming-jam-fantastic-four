@@ -24,7 +24,7 @@ func _ready() -> void:
 func _on_bomb_transferred(from_holder: Node, _to_holder: Node) -> void:
 	var previous := from_holder as Character
 	if previous != null:
-		clear_for(previous)
+		clear_for(previous, GameEvents.MotivoRetiro.TRANSFERENCIA)
 
 
 func _physics_process(delta: float) -> void:
@@ -111,24 +111,24 @@ func tick(delta: float) -> void:
 		var effect := _active[i]
 		var target := effect.target as Character
 		effect.remaining -= delta
-		if (
-			target == null
-			or not is_instance_valid(target)
-			or target.is_eliminated
-			or effect.remaining <= 0.0
-		):
-			_expire(i)
+		var target_gone := (
+			target == null or not is_instance_valid(target) or target.is_eliminated
+		)
+		if target_gone:
+			_expire(i, GameEvents.MotivoRetiro.ELIMINACION)
+		elif effect.remaining <= 0.0:
+			_expire(i, GameEvents.MotivoRetiro.EXPIRACION)
 
 
 func clear_all() -> void:
 	for i in range(_active.size() - 1, -1, -1):
-		_expire(i)
+		_expire(i, GameEvents.MotivoRetiro.FIN_PARTIDA)
 
 
-func clear_for(target: Character) -> void:
+func clear_for(target: Character, reason: int = GameEvents.MotivoRetiro.ELIMINACION) -> void:
 	for i in range(_active.size() - 1, -1, -1):
 		if _active[i].target == target or _active[i].owner == target:
-			_expire(i)
+			_expire(i, reason)
 
 
 ## Efectos activos de un personaje: [{id, type, label, remaining, duration, magnitude}].
@@ -154,11 +154,11 @@ func _find(target: Character, effect_id: String) -> int:
 	return -1
 
 
-func _expire(index: int) -> void:
+func _expire(index: int, reason: int) -> void:
 	var effect := _active[index]
 	_active.remove_at(index)
 	var target := effect.target as Character
 	if target != null and is_instance_valid(target):
 		target.speed_modifiers.erase(effect.id)
 		target.marks.erase(effect.id)
-		GameEvents.effect_expired.emit(target, effect.id)
+		GameEvents.effect_expired.emit(target, effect.id, reason)

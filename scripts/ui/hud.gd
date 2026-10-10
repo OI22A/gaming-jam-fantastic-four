@@ -238,7 +238,7 @@ func _on_effect_applied(_target: Node, _effect_id: String, _duration: float) -> 
 	_update_minimap_visibility()
 
 
-func _on_effect_expired(_target: Node, _effect_id: String) -> void:
+func _on_effect_expired(_target: Node, _effect_id: String, _reason: int) -> void:
 	_update_minimap_visibility()
 
 

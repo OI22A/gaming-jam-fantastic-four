@@ -18,6 +18,7 @@ const TONES := {
 	"countdown": {"freq": 660.0, "duration": 0.12, "volume": 0.5},
 	"go": {"freq": 990.0, "duration": 0.30, "volume": 0.6},
 	"bomb_tick": {"freq": 1200.0, "duration": 0.04, "volume": 0.35},
+	"bomb_fuse": {"freq": 300.0, "duration": 0.3, "volume": 0.5},
 	"bomb_transfer": {"freq": 440.0, "duration": 0.14, "volume": 0.6},
 	"bomb_explode": {"freq": 80.0, "duration": 0.70, "volume": 0.9, "noise": true},
 	"lucky_block": {"freq": 1320.0, "duration": 0.22, "volume": 0.55},
@@ -36,6 +37,7 @@ var _players: Array[AudioStreamPlayer] = []
 var _music_player: AudioStreamPlayer
 var _next_player := 0
 var _last_tick_second := -1
+var _fuse_played := false
 var _audio_unlocked := false
 
 
@@ -64,7 +66,7 @@ func _ready() -> void:
 	GameEvents.effect_applied.connect(
 		func(_t: Node, _e: String, _d: float) -> void: play("effect_on")
 	)
-	GameEvents.effect_expired.connect(func(_t: Node, _e: String) -> void: play("effect_off"))
+	GameEvents.effect_expired.connect(_on_effect_expired)
 	GameEvents.match_ended.connect(func(won: bool) -> void: play("win" if won else "lose"))
 	GameEvents.bomb_time_changed.connect(_on_bomb_time_changed)
 
@@ -111,12 +113,30 @@ func _on_lucky_block_collected(_collector: Node, reward: Dictionary) -> void:
 	play(sfx)
 
 
+func _on_effect_expired(_target: Node, effect_id: String, reason: int) -> void:
+	# Las marcas sobre rivales no deben sonar (una por rival).
+	if effect_id.ends_with(":mark_rivals"):
+		return
+	if (
+		reason == GameEvents.MotivoRetiro.EXPIRACION
+		or reason == GameEvents.MotivoRetiro.TRANSFERENCIA
+	):
+		play("effect_off")
+
+
 func _on_round_started(_round: int, _holder: Node) -> void:
 	_last_tick_second = -1
+	_fuse_played = false
 	play("go")
 
 
 func _on_bomb_time_changed(time_left: float, _duration: float) -> void:
+	# Audio de mecha: una vez al entrar en los últimos 25 s.
+	if time_left > 25.0:
+		_fuse_played = false
+	elif time_left > 0.0 and not _fuse_played:
+		_fuse_played = true
+		play("bomb_fuse")
 	# Tic-tac en los últimos 10 segundos (una vez por segundo).
 	if time_left > 10.0 or time_left <= 0.0:
 		return
@@ -125,9 +145,8 @@ func _on_bomb_time_changed(time_left: float, _duration: float) -> void:
 		_last_tick_second = second
 		play("bomb_tick")
 
-
 func _load_or_generate(sfx_name: String) -> AudioStream:
-	for ext in ["ogg", "wav"]:
+	for ext in ["ogg", "wav", "mp3"]:
 		var path := "%s%s.%s" % [SFX_DIR, sfx_name, ext]
 		if ResourceLoader.exists(path):
 			return load(path) as AudioStream

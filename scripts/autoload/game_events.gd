@@ -27,7 +27,8 @@ signal bomb_transfer_random_requested
 # --- Lucky Blocks y efectos (RF-06, RF-07) -----------------------------------
 signal lucky_block_collected(collector: Node, reward: Dictionary)
 signal effect_applied(target: Node, effect_id: String, duration: float)
-signal effect_expired(target: Node, effect_id: String)
+enum MotivoRetiro { EXPIRACION, TRANSFERENCIA, ELIMINACION, FIN_PARTIDA }
+signal effect_expired(target: Node, effect_id: String, reason: int)
 
 # --- Audio (RF-09) ------------------------------------------------------------
 signal sfx_requested(sfx_name: String)
