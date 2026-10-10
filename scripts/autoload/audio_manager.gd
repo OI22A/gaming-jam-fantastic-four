@@ -2,18 +2,24 @@ extends Node
 ## Gestión de audio (autoload "AudioManager"). RF-09.
 ##
 ## - Escucha los eventos de GameEvents y reproduce el sonido asociado.
-## - Si existe un archivo en res://assets/audio/sfx/<nombre>.ogg|.wav lo usa;
+## - Si existe un archivo en res://assets/audio/sfx/<nombre>.ogg|.wav|.mp3 lo usa;
 ##   si no, genera un tono sintético para que el juego tenga retroalimentación
 ##   sonora desde el primer día (placeholder). Para cambiar un sonido basta con
 ##   soltar el archivo con el nombre correcto.
+## - Música de fondo: res://assets/audio/music/music_menu y music_game (.ogg|.mp3).
+##   Si falta, suena la música procedural de respaldo.
+## - bomb_fuse se sincroniza con el tiempo restante de la bomba para terminar
+##   con la explosión.
 ##
-## Nombres de sonido: countdown, go, bomb_tick, bomb_transfer, bomb_explode,
-## lucky_block, effect_on, effect_off, win, lose.
+## Nombres de sonido: countdown, go, bomb_tick, bomb_fuse, bomb_transfer,
+## bomb_explode, lucky_block, lucky_block_rare, lucky_block_legendary,
+## effect_on, effect_off, win, lose.
 
 const SFX_DIR := "res://assets/audio/sfx/"
 const SAMPLE_RATE := 22050
 const POOL_SIZE := 8
 const MUSIC_SECONDS := 8
+const MUSIC_DIR := "res://assets/audio/music/"
 const TONES := {
 	"countdown": {"freq": 660.0, "duration": 0.12, "volume": 0.5},
 	"go": {"freq": 990.0, "duration": 0.30, "volume": 0.6},
@@ -35,9 +41,13 @@ var sfx_volume_db := 0.0
 var _streams: Dictionary = {}
 var _players: Array[AudioStreamPlayer] = []
 var _music_player: AudioStreamPlayer
+var _fallback_music: AudioStream
+var _music_streams: Dictionary = {}
+var _current_music := ""
 var _next_player := 0
 var _last_tick_second := -1
 var _fuse_played := false
+var _fuse_player: AudioStreamPlayer
 var _audio_unlocked := false
 
 
@@ -49,11 +59,16 @@ func _ready() -> void:
 		_players.append(player)
 	_music_player = AudioStreamPlayer.new()
 	_music_player.name = "Music"
-	_music_player.stream = _make_music()
-	_music_player.volume_db = -19.0
+	_fallback_music = _make_music()
+	_music_streams["music_menu"] = _load_music("music_menu")
+	_music_streams["music_game"] = _load_music("music_game")
+	_music_player.volume_db = -15.0
 	add_child(_music_player)
 	for sfx_name in TONES:
 		_streams[sfx_name] = _load_or_generate(sfx_name)
+	_fuse_player = AudioStreamPlayer.new()
+	_fuse_player.name = "Fuse"
+	add_child(_fuse_player)
 
 	GameEvents.sfx_requested.connect(play)
 	GameEvents.countdown_tick.connect(func(_s: int) -> void: play("countdown"))
@@ -69,6 +84,7 @@ func _ready() -> void:
 	GameEvents.effect_expired.connect(_on_effect_expired)
 	GameEvents.match_ended.connect(func(won: bool) -> void: play("win" if won else "lose"))
 	GameEvents.bomb_time_changed.connect(_on_bomb_time_changed)
+	GameEvents.state_changed.connect(_on_state_changed)
 
 
 func play(sfx_name: String) -> void:
@@ -93,12 +109,48 @@ func _input(event: InputEvent) -> void:
 
 func _unlock_audio() -> void:
 	_audio_unlocked = true
-	if _music_player != null:
-		_music_player.play()
+	if GameManager.state == GameManager.State.MENU:
+		_play_music("music_menu")
+	else:
+		_play_music("music_game")
 
 
 func set_master_volume(value: float) -> void:
 	AudioServer.set_bus_volume_db(0, linear_to_db(clampf(value, 0.0, 1.0)))
+
+
+func _load_music(music_name: String) -> AudioStream:
+	for ext in ["ogg", "mp3"]:
+		var path := "%s%s.%s" % [MUSIC_DIR, music_name, ext]
+		if ResourceLoader.exists(path):
+			var stream := load(path) as AudioStream
+			if stream is AudioStreamOggVorbis or stream is AudioStreamMP3:
+				stream.loop = true
+			return stream
+	return null
+
+
+func _play_music(music_name: String) -> void:
+	if not _audio_unlocked or music_name == _current_music:
+		return
+	_current_music = music_name
+	var stream: AudioStream = _music_streams.get(music_name)
+	_music_player.stream = stream if stream != null else _fallback_music
+	_music_player.play()
+
+
+func _on_state_changed(new_state: int, _old_state: int) -> void:
+	_fuse_player.stream_paused = new_state == GameManager.State.PAUSED
+	if new_state == GameManager.State.MENU or new_state == GameManager.State.COUNTDOWN:
+		_stop_fuse()
+	if new_state == GameManager.State.MENU:
+		_play_music("music_menu")
+	elif (
+		new_state == GameManager.State.COUNTDOWN
+		or new_state == GameManager.State.PLAYING
+		or new_state == GameManager.State.ROUND_END
+	):
+		_play_music("music_game")
 
 
 func _on_lucky_block_collected(_collector: Node, reward: Dictionary) -> void:
@@ -126,17 +178,12 @@ func _on_effect_expired(_target: Node, effect_id: String, reason: int) -> void:
 
 func _on_round_started(_round: int, _holder: Node) -> void:
 	_last_tick_second = -1
-	_fuse_played = false
+	_stop_fuse()
 	play("go")
 
 
 func _on_bomb_time_changed(time_left: float, _duration: float) -> void:
-	# Audio de mecha: una vez al entrar en los últimos 25 s.
-	if time_left > 25.0:
-		_fuse_played = false
-	elif time_left > 0.0 and not _fuse_played:
-		_fuse_played = true
-		play("bomb_fuse")
+	_update_fuse(time_left)
 	# Tic-tac en los últimos 10 segundos (una vez por segundo).
 	if time_left > 10.0 or time_left <= 0.0:
 		return
@@ -144,6 +191,33 @@ func _on_bomb_time_changed(time_left: float, _duration: float) -> void:
 	if second != _last_tick_second:
 		_last_tick_second = second
 		play("bomb_tick")
+
+
+func _update_fuse(time_left: float) -> void:
+	var stream: AudioStream = _streams.get("bomb_fuse")
+	if not _audio_unlocked or stream == null:
+		return
+	var length := stream.get_length()
+	if time_left <= 0.0 or time_left > length:
+		_stop_fuse()
+		return
+	var target_pos := length - time_left
+	if not _fuse_player.playing:
+		if _fuse_played:
+			return
+		_fuse_played = true
+		_fuse_player.stream = stream
+		_fuse_player.volume_db = sfx_volume_db
+		_fuse_player.play(target_pos)
+	elif absf(_fuse_player.get_playback_position() - target_pos) > 0.4:
+		_fuse_player.seek(target_pos)
+
+
+func _stop_fuse() -> void:
+	_fuse_played = false
+	if _fuse_player != null:
+		_fuse_player.stop()
+
 
 func _load_or_generate(sfx_name: String) -> AudioStream:
 	for ext in ["ogg", "wav", "mp3"]:
