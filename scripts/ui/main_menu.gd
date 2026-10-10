@@ -2,6 +2,13 @@ class_name MainMenu
 extends CanvasLayer
 ## Menú principal: elegir número de bots e iniciar la partida con GameManager.
 
+## Se rellena mientras se muestran las reglas (entre pulsar "Jugar" y empezar la partida).
+var rules_screen: RulesScreen
+var play_button: Button
+
+var _volume_slider: HSlider
+var _bots_spin: SpinBox
+
 
 func _ready() -> void:
 	var background := ColorRect.new()
@@ -35,6 +42,7 @@ func _ready() -> void:
 	volume_label.text = "Volumen: "
 	volume_row.add_child(volume_label)
 	var volume := HSlider.new()
+	_volume_slider = volume
 	volume.min_value = 0.0
 	volume.max_value = 1.0
 	volume.step = 0.05
@@ -51,16 +59,17 @@ func _ready() -> void:
 	bots_label.text = "Bots rivales: "
 	bots_row.add_child(bots_label)
 	var bots_spin := SpinBox.new()
+	_bots_spin = bots_spin
 	bots_spin.min_value = GameManager.MIN_BOTS
 	bots_spin.max_value = GameManager.MAX_BOTS
 	bots_spin.value = GameManager.bot_count
 	bots_spin.value_changed.connect(func(v: float) -> void: GameManager.bot_count = int(v))
 	bots_row.add_child(bots_spin)
 
-	var play_button := Button.new()
+	play_button = Button.new()
 	play_button.text = "Jugar"
 	play_button.custom_minimum_size = Vector2(320.0, 48.0)
-	play_button.pressed.connect(GameManager.start_match.bind(GameManager.DEFAULT_MAP_ID))
+	play_button.pressed.connect(_on_play_pressed)
 	box.add_child(play_button)
 
 	var help := Label.new()
@@ -76,3 +85,33 @@ func _ready() -> void:
 	credits.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	credits.modulate = Color(1.0, 1.0, 1.0, 0.5)
 	box.add_child(credits)
+
+
+## "Jugar" no inicia la partida: primero muestra las reglas y espera a "¡Entendido!".
+func _on_play_pressed() -> void:
+	if rules_screen != null:
+		return
+	_set_menu_enabled(false)
+	rules_screen = RulesScreen.new()
+	rules_screen.confirmed.connect(_on_rules_confirmed)
+	rules_screen.cancelled.connect(_on_rules_cancelled)
+	add_child(rules_screen)
+
+
+func _on_rules_confirmed() -> void:
+	GameManager.start_match(GameManager.DEFAULT_MAP_ID)
+
+
+func _on_rules_cancelled() -> void:
+	if rules_screen != null:
+		rules_screen.queue_free()
+		rules_screen = null
+	_set_menu_enabled(true)
+	play_button.grab_focus()
+
+
+## Mientras las reglas están abiertas, el menú de fondo no debe poder usarse (ni con Tab).
+func _set_menu_enabled(enabled: bool) -> void:
+	play_button.disabled = not enabled
+	_bots_spin.editable = enabled
+	_volume_slider.editable = enabled
