@@ -1,0 +1,5 @@
+# Herramientas de desarrollo opcionales (Python 3.9+):
+#   pip install -r requirements-dev.txt
+# gdtoolkit aporta `gdformat` (formateador) y `gdlint` (linter) para GDScript 4.
+# Además, serve_web.py solo usa la biblioteca estándar de Python.
+gdtoolkit>=4.3,<5

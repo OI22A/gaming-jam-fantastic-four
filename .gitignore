@@ -1,0 +1,20 @@
+# Godot 4
+.godot/
+*.translation
+export_credentials.cfg
+export_presets.cfg.bak
+
+# Exportaciones (se regeneran con scripts/tools/export_web.*)
+build/*
+!build/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Editores / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
