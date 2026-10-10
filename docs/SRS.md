@@ -228,7 +228,7 @@ Base compartida (`CharacterBody2D`) para el humano y el número de bots configur
 ## 10. RF-09b Audio
 
 - **RF-09b.1** Sonidos para transferencia, explosión, recogida de bloque (uno por rareza), efecto activado, pérdida de efecto, atajo, cuenta final del temporizador (dura lo que dure el audio definitivo; el umbral de inicio es **[param]**), victoria y derrota.
-- **RF-09b.2** Música procedural de fondo con control de volumen.
+- **RF-09b.2** Música de fondo en bucle con control de volumen: una pista para el menú y otra para la partida (COUNTDOWN, PLAYING y ROUND_END). Si falta el archivo de una pista, se usa la música procedural de respaldo.
 - **RF-09b.3** Los sonidos se reproducen en respuesta a señales, sin código de audio en otros módulos.
 - **RF-09b.4** El audio se inicia tras la primera interacción del usuario (restricción de los navegadores).
 
@@ -277,7 +277,7 @@ Para garantizar el desacoplamiento total de los módulos, el software debe imple
 | Categoría | Señal | Origen / Emisor | Componentes que Escuchan |
 |---|---|---|---|
 | **Flujo** | `match_requested(map_id)` / `menu_requested` | GameManager | Main |
-| **Flujo** | `state_changed(new_state, old_state)` | GameManager | HUD |
+| **Flujo** | `state_changed(new_state, old_state)` | GameManager | HUD, AudioManager |
 | **Partida** | `countdown_tick(segundos)` | MatchController | HUD, AudioManager |
 | **Partida** | `round_started(ronda_num, portador)` | MatchController | HUD, AudioManager |
 | **Partida** | `character_eliminated(personaje)` | MatchController | Core del sistema |
