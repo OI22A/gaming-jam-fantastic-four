@@ -13,6 +13,7 @@ const BODY_RADIUS := 14.0
 ## Se precarga por ruta (en vez de usar el class_name) para que el juego arranque aunque
 ## Godot aún no haya registrado la clase nueva (p. ej. al ejecutar sin abrir el editor).
 const SpriteScript := preload("res://scripts/characters/character_sprite.gd")
+const BombSpriteScript := preload("res://scripts/characters/bomb_sprite.gd")
 
 @export var display_name := "Personaje"
 @export var base_speed := 230.0
@@ -29,6 +30,7 @@ var is_eliminated := false
 var is_using_shortcut := false
 var game_map: GameMap
 var _sprite: AnimatedSprite2D
+var _bomb_sprite: Node2D
 var _transfer_flash_left := 0.0
 ## effect_id -> multiplicador de velocidad (>=1, solo mejoras).
 var speed_modifiers: Dictionary = {}
@@ -53,6 +55,11 @@ func _ready() -> void:
 		add_child(shape)
 	_sprite = SpriteScript.new()
 	add_child(_sprite)
+	# La papa-bomba flota sobre la cabeza (la base de la papa queda justo encima del sprite).
+	_bomb_sprite = BombSpriteScript.new()
+	_bomb_sprite.position = Vector2(0.0, -BODY_RADIUS - 8.0)
+	_bomb_sprite.visible = has_bomb
+	add_child(_bomb_sprite)
 	GameEvents.bomb_transferred.connect(_on_bomb_transferred)
 
 
@@ -85,9 +92,12 @@ func _physics_process(_delta: float) -> void:
 
 
 func _process(_delta: float) -> void:
+	# Parpadeo al recibir la bomba (los sprites son nodos hijos, no parte de _draw).
+	var blink_hidden := _transfer_flash_left > 0.0 and int(_transfer_flash_left * 12.0) % 2 == 0
 	if _sprite != null:
-		# Parpadeo al recibir la bomba (el sprite es un nodo hijo, no parte de _draw).
-		_sprite.visible = not (_transfer_flash_left > 0.0 and int(_transfer_flash_left * 12.0) % 2 == 0)
+		_sprite.visible = not blink_hidden
+	if _bomb_sprite != null:
+		_bomb_sprite.visible = has_bomb and not blink_hidden
 	queue_redraw()
 
 
@@ -124,16 +134,6 @@ func _draw() -> void:
 	draw_set_transform(Vector2(0.0, BODY_RADIUS - 3.0), 0.0, Vector2(1.0, 0.45))
 	draw_circle(Vector2.ZERO, BODY_RADIUS * 0.9, Color(0.0, 0.0, 0.0, 0.3))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	if has_bomb:
-		var bomb_pos := Vector2(0.0, -BODY_RADIUS - 24.0)
-		draw_circle(bomb_pos, 9.0, Color(0.1, 0.1, 0.1))
-		draw_line(
-			bomb_pos + Vector2(3.0, -8.0),
-			bomb_pos + Vector2(8.0, -14.0),
-			Color(0.8, 0.65, 0.4),
-			2.0
-		)
-		draw_circle(bomb_pos + Vector2(8.0, -14.0), 3.5, Color(1.0, 0.6, 0.1))
 	var font := ThemeDB.fallback_font
 	draw_string(
 		font,
