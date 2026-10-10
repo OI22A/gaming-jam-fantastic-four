@@ -134,7 +134,12 @@ func _get_others() -> Array[Character]:
 	var result: Array[Character] = []
 	for node in get_tree().get_nodes_in_group("characters"):
 		var other := node as Character
-		if other != null and other != self and not other.is_eliminated:
+		if (
+        			other != null
+        			and other != self
+        			and not other.is_eliminated
+        			and not other.is_using_shortcut
+        		):
 			result.append(other)
 	return result
 

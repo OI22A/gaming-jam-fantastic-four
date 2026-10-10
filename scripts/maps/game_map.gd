@@ -14,6 +14,8 @@ const SHORTCUT_INTERACTION_RADIUS := 56.0
 const SHORTCUT_WIDTH := 96.0
 const SHORTCUT_GATE_DEPTH := 34.0
 const SHORTCUT_WALL_THICKNESS := 12.0
+## Holgura extra entre la zona navegable y los muros del atajo.
+const SHORTCUT_NAV_MARGIN := 4.0
 
 @export var map_id := "map"
 @export var display_name := "Mapa"
@@ -81,8 +83,11 @@ func _build_navigation() -> void:
 
 
 func _make_navigation_polygon(block_shortcuts: bool) -> NavigationPolygon:
-	var polygon := NavigationPolygon.new()
-	polygon.add_outline(
+	# Se hornea con NavigationMeshSourceGeometryData2D: une los huecos que se solapan
+	# (corredores que se cruzan entre sí o con obstáculos), cosa que
+	# make_polygons_from_outlines() no soporta ("Convex partition failed").
+	var source := NavigationMeshSourceGeometryData2D.new()
+	source.add_traversable_outline(
 		PackedVector2Array(
 			[
 				Vector2(24, 24),
@@ -94,17 +99,18 @@ func _make_navigation_polygon(block_shortcuts: bool) -> NavigationPolygon:
 	)
 	for obstacle in obstacles:
 		var rect: Rect2 = obstacle.rect.grow(Character.BODY_RADIUS + 8.0)
-		_add_navigation_hole(polygon, rect)
+		source.add_obstruction_outline(_rect_outline(rect))
 	if block_shortcuts:
 		for route in shortcuts:
-			_add_navigation_hole(polygon, Rect2(route.entry - Vector2(52, 52), Vector2(104, 104)))
-			_add_navigation_hole(polygon, Rect2(route.exit - Vector2(52, 52), Vector2(104, 104)))
-	polygon.make_polygons_from_outlines()
+			source.add_obstruction_outline(_shortcut_nav_outline(route.entry, route.exit))
+	var polygon := NavigationPolygon.new()
+	polygon.agent_radius = 0.0  # Los huecos ya incluyen el radio del cuerpo.
+	NavigationServer2D.bake_from_source_geometry_data(polygon, source)
 	return polygon
 
 
-func _add_navigation_hole(polygon: NavigationPolygon, rect: Rect2) -> void:
-	polygon.add_outline(
+func _rect_outline(rect: Rect2) -> PackedVector2Array:
+	return _same_winding(
 		PackedVector2Array(
 			[
 				rect.position,
@@ -114,6 +120,39 @@ func _add_navigation_hole(polygon: NavigationPolygon, rect: Rect2) -> void:
 			]
 		)
 	)
+
+
+## Todos los huecos deben tener el mismo sentido de giro; si no, al solaparse
+## (p. ej. dos corredores que se cruzan) se anulan entre sí y el horneado falla.
+func _same_winding(outline: PackedVector2Array) -> PackedVector2Array:
+	if not Geometry2D.is_polygon_clockwise(outline):
+		outline.reverse()
+	return outline
+
+
+## Contorno que excluye de la zona navegable el corredor, las puertas y los muros del
+## atajo, pero NO la franja libre delante de la entrada ni detrás de la salida: así un
+## portador (bot) puede llegar hasta quien se quede parado ahí y nadie puede campear.
+func _shortcut_nav_outline(entry: Vector2, exit: Vector2) -> PackedVector2Array:
+	var direction := (exit - entry).normalized()
+	var half_width := (
+		SHORTCUT_WIDTH * 0.5
+		+ SHORTCUT_WALL_THICKNESS * 0.5
+		+ Character.BODY_RADIUS
+		+ SHORTCUT_NAV_MARGIN
+	)
+	# Las puertas están a SHORTCUT_GATE_DEPTH de la entrada/salida; el hueco empieza
+	# justo donde el centro de un personaje deja de poder acercarse a ellas.
+	var inset := (
+		SHORTCUT_GATE_DEPTH
+		- SHORTCUT_WALL_THICKNESS * 0.5
+		- Character.BODY_RADIUS
+		- SHORTCUT_NAV_MARGIN
+	)
+	var side := direction.orthogonal() * half_width
+	var start := entry + direction * inset
+	var end := exit - direction * inset
+	return _same_winding(PackedVector2Array([start + side, end + side, end - side, start - side]))
 
 
 func try_use_shortcut(character: Character) -> bool:

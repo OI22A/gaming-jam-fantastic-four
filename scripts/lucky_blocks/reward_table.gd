@@ -19,10 +19,10 @@ const RARITY_NAMES := {
 	Rarity.LEGENDARY: "Legendaria",
 }
 const RARITY_COLORS := {
-	Rarity.COMMON: Color(0.78, 0.42, 0.18),
-	Rarity.RARE: Color(0.78, 0.82, 0.88),
+	Rarity.COMMON: Color(0.80, 0.50, 0.20),
+	Rarity.RARE: Color(0.78, 0.80, 0.84),
 	Rarity.EPIC: Color(0.75, 0.4, 1.0),
-	Rarity.LEGENDARY: Color(1.0, 0.78, 0.18),
+	Rarity.LEGENDARY: Color(1.0, 0.84, 0.0),
 }
 
 const REWARDS := [
@@ -42,10 +42,10 @@ const REWARDS := [
 	},
 	{
 		"id": "extra_time",
-		"name": "Tiempo extra +30 s",
+		"name": "Tiempo extra +5 s",
 		"rarity": Rarity.COMMON,
 		"weight": 74.0 / 3.0,
-		"effects": [{"type": "extra_time", "magnitude": 30.0, "duration": 0.0}],
+		"effects": [{"type": "extra_time", "magnitude": 5.0, "duration": 0.0}],
 	},
 	{
 		"id": "silver_speed",
