@@ -28,6 +28,22 @@ func _ready() -> void:
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(subtitle)
 
+	var volume_row := HBoxContainer.new()
+	volume_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_child(volume_row)
+	var volume_label := Label.new()
+	volume_label.text = "Volumen: "
+	volume_row.add_child(volume_label)
+	var volume := HSlider.new()
+	volume.min_value = 0.0
+	volume.max_value = 1.0
+	volume.step = 0.05
+	volume.value = 0.8
+	volume.custom_minimum_size.x = 220.0
+	volume.value_changed.connect(AudioManager.set_master_volume)
+	AudioManager.set_master_volume(volume.value)
+	volume_row.add_child(volume)
+
 	var bots_row := HBoxContainer.new()
 	bots_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_child(bots_row)
@@ -49,7 +65,10 @@ func _ready() -> void:
 		box.add_child(button)
 
 	var help := Label.new()
-	help.text = "Mover: WASD / Flechas   ·   Pausa: Esc   ·   Reiniciar: R"
+	help.text = (
+		"Mover: WASD / Flechas   ·   Atajo sin bomba: E / Espacio"
+		+ "   ·   Pausa: Esc   ·   Reiniciar: R"
+	)
 	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(help)
 

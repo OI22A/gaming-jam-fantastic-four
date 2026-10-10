@@ -47,7 +47,7 @@ func test_transfer_on_touch_after_cooldown() -> void:
 	b.global_position = Vector2(20, 0)
 	bomb.tick(0.5)  # aún en enfriamiento
 	assert_eq(bomb.holder, a, "No transfiere durante el enfriamiento.")
-	bomb.tick(0.6)  # enfriamiento cumplido (1.0 s)
+	bomb.tick(1.1)  # enfriamiento cumplido (1.5 s)
 	assert_eq(bomb.holder, b)
 	assert_true(b.has_bomb)
 	assert_false(a.has_bomb)
@@ -74,3 +74,12 @@ func test_time_bonus_adds_and_subtracts() -> void:
 	assert_almost_eq(bomb.time_left, 13.0, 0.001)
 	bomb.add_time(-20.0)
 	assert_eq(bomb.time_left, 0.0, "Nunca baja de cero.")
+
+
+func test_random_transfer_does_not_reset_timer() -> void:
+	bomb.start_round(a)
+	bomb.tick(2.0)
+	var before := bomb.time_left
+	bomb.transfer_to_random()
+	assert_ne(bomb.holder, a)
+	assert_almost_eq(bomb.time_left, before, 0.001)

@@ -24,6 +24,8 @@ func test_match_spawns_player_and_bots() -> void:
 	assert_eq(match_node.characters.size(), 3)
 	assert_not_null(match_node.player)
 	assert_not_null(match_node.hud)
+	assert_eq(match_node.spawner.blocks.size(), 4, "El límite activo de Lucky Blocks es cuatro.")
+	assert_almost_eq(match_node.spawner.respawn_delay, 15.0, 0.001)
 	assert_eq(GameManager.state, GameManager.State.COUNTDOWN)
 
 

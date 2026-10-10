@@ -13,3 +13,9 @@ func _init() -> void:
 
 func get_input_direction() -> Vector2:
 	return Input.get_vector("move_left", "move_right", "move_up", "move_down")
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		for action in ["move_left", "move_right", "move_up", "move_down"]:
+			Input.action_release(action)

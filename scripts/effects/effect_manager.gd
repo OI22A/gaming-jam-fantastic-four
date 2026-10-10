@@ -1,7 +1,7 @@
 class_name EffectManager
 extends Node
 ## Aplica y retira efectos temporales (RF-07): mejoras de velocidad,
-## penalizaciones, marcado de jugadores y tiempo adicional de la bomba.
+## rastreo de jugadores y tiempo adicional de la bomba.
 ##
 ## - Un mismo efecto (mismo id) sobre el mismo personaje se refresca, no se acumula.
 ## - Efectos distintos se combinan (los multiplicadores de velocidad se multiplican).
@@ -11,8 +11,20 @@ const TYPE_SPEED := "speed"
 const TYPE_MARK := "mark"
 const TYPE_MARK_RIVALS := "mark_rivals"
 const TYPE_EXTRA_TIME := "extra_time"
+const TYPE_TRANSFER_RANDOM := "transfer_random"
+const TYPE_TRACKING := "tracking"
 
 var _active: Array[Dictionary] = []
+
+
+func _ready() -> void:
+	GameEvents.bomb_transferred.connect(_on_bomb_transferred)
+
+
+func _on_bomb_transferred(from_holder: Node, _to_holder: Node) -> void:
+	var previous := from_holder as Character
+	if previous != null:
+		clear_for(previous)
 
 
 func _physics_process(delta: float) -> void:
@@ -28,8 +40,18 @@ func apply_reward(collector: Character, reward: Dictionary, rivals: Array) -> vo
 		var type: String = data.type
 		var effect_id := "%s:%s" % [reward.get("id", "reward"), type]
 		if type == TYPE_MARK_RIVALS:
+			apply_effect(
+				collector,
+				"%s:tracking" % reward.get("id", "reward"),
+				TYPE_TRACKING,
+				0.0,
+				float(data.duration),
+				"Rastreo"
+			)
 			for rival in rivals:
-				apply_effect(rival, effect_id, TYPE_MARK, 0.0, float(data.duration), "Marcado")
+				apply_effect(
+					rival, effect_id, TYPE_MARK, 0.0, float(data.duration), "Marcado", collector
+				)
 		else:
 			apply_effect(
 				collector, effect_id, type, float(data.magnitude), float(data.duration), label
@@ -42,12 +64,17 @@ func apply_effect(
 	type: String,
 	magnitude: float,
 	duration: float,
-	label: String = ""
+	label: String = "",
+	owner: Character = null
 ) -> void:
 	if target == null or target.is_eliminated:
 		return
 	if type == TYPE_EXTRA_TIME:
 		GameEvents.bomb_time_bonus_requested.emit(magnitude)
+		GameEvents.effect_applied.emit(target, effect_id, 0.0)
+		return
+	if type == TYPE_TRANSFER_RANDOM:
+		GameEvents.bomb_transfer_random_requested.emit()
 		GameEvents.effect_applied.emit(target, effect_id, 0.0)
 		return
 
@@ -61,6 +88,7 @@ func apply_effect(
 		. append(
 			{
 				"target": target,
+				"owner": owner if owner != null else target,
 				"id": effect_id,
 				"type": type,
 				"magnitude": magnitude,
@@ -99,7 +127,7 @@ func clear_all() -> void:
 
 func clear_for(target: Character) -> void:
 	for i in range(_active.size() - 1, -1, -1):
-		if _active[i].target == target:
+		if _active[i].target == target or _active[i].owner == target:
 			_expire(i)
 
 
@@ -110,6 +138,13 @@ func get_active_for(target: Character) -> Array:
 		if effect.target == target:
 			result.append(effect)
 	return result
+
+
+func has_tracking(target: Character) -> bool:
+	for effect in _active:
+		if effect.target == target and effect.type == TYPE_TRACKING:
+			return true
+	return false
 
 
 func _find(target: Character, effect_id: String) -> int:

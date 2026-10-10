@@ -9,20 +9,28 @@ extends Node2D
 ## conservando la misma API (get_bounds, get_spawn_points, ...).
 
 const WALL_THICKNESS := 200.0
+const LAYOUT_SCALE := 1.25
+const SHORTCUT_RADIUS := 56.0
 
 @export var map_id := "map"
 @export var display_name := "Mapa"
-@export var map_size := Vector2(1920.0, 1080.0)
+@export var map_size := Vector2(2400.0, 1350.0)
+@export var shortcut_use_seconds := 1.2
 @export var ground_color := Color(0.35, 0.6, 0.3)
 
 ## Cada obstáculo: {rect: Rect2, kind: String, color: Color}
 var obstacles: Array[Dictionary] = []
 var spawn_points: Array[Vector2] = []
 var lucky_block_points: Array[Vector2] = []
+## Cada atajo conecta dos zonas y se bloquea durante la animación de uso.
+var shortcuts: Array[Dictionary] = []
+var _shortcut_busy: Array[bool] = []
 
 
 func _ready() -> void:
 	_define_layout()
+	_scale_layout()
+	_build_navigation()
 	_build_collision()
 	queue_redraw()
 
@@ -34,6 +42,149 @@ func _define_layout() -> void:
 
 func add_obstacle(rect: Rect2, kind: String = "block", color: Color = Color(0.5, 0.5, 0.5)) -> void:
 	obstacles.append({"rect": rect, "kind": kind, "color": color})
+
+
+func add_shortcut(entry: Vector2, exit: Vector2) -> void:
+	shortcuts.append({"entry": entry, "exit": exit})
+
+
+func _scale_layout() -> void:
+	map_size = Vector2(1920.0, 1080.0) * LAYOUT_SCALE
+	for i in obstacles.size():
+		var obstacle: Dictionary = obstacles[i]
+		var rect: Rect2 = obstacle.rect
+		obstacle.rect = Rect2(rect.position * LAYOUT_SCALE, rect.size * LAYOUT_SCALE)
+		obstacles[i] = obstacle
+	for i in spawn_points.size():
+		spawn_points[i] = spawn_points[i] * LAYOUT_SCALE
+	for i in lucky_block_points.size():
+		lucky_block_points[i] = lucky_block_points[i] * LAYOUT_SCALE
+	for i in shortcuts.size():
+		var route: Dictionary = shortcuts[i]
+		var entry: Vector2 = route.entry
+		var exit: Vector2 = route.exit
+		route.entry = entry * LAYOUT_SCALE
+		route.exit = exit * LAYOUT_SCALE
+		shortcuts[i] = route
+		_shortcut_busy.append(false)
+
+
+func _build_navigation() -> void:
+	var region := NavigationRegion2D.new()
+	region.name = "Navigation"
+	region.navigation_layers = 1
+	region.navigation_polygon = _make_navigation_polygon(true)
+	add_child(region)
+
+
+func _make_navigation_polygon(block_shortcuts: bool) -> NavigationPolygon:
+	var polygon := NavigationPolygon.new()
+	polygon.add_outline(
+		PackedVector2Array(
+			[
+				Vector2(24, 24),
+				Vector2(map_size.x - 24, 24),
+				map_size - Vector2(24, 24),
+				Vector2(24, map_size.y - 24),
+			]
+		)
+	)
+	for obstacle in obstacles:
+		var rect: Rect2 = obstacle.rect.grow(Character.BODY_RADIUS + 8.0)
+		_add_navigation_hole(polygon, rect)
+	if block_shortcuts:
+		for route in shortcuts:
+			_add_navigation_hole(polygon, Rect2(route.entry - Vector2(52, 52), Vector2(104, 104)))
+			_add_navigation_hole(polygon, Rect2(route.exit - Vector2(52, 52), Vector2(104, 104)))
+	polygon.make_polygons_from_outlines()
+	return polygon
+
+
+func _add_navigation_hole(polygon: NavigationPolygon, rect: Rect2) -> void:
+	polygon.add_outline(
+		PackedVector2Array(
+			[
+				rect.position,
+				Vector2(rect.position.x, rect.end.y),
+				rect.end,
+				Vector2(rect.end.x, rect.position.y),
+			]
+		)
+	)
+
+
+func try_use_shortcut(character: Character) -> bool:
+	if (
+		character == null
+		or character.has_bomb
+		or character.is_eliminated
+		or character.is_using_shortcut
+	):
+		return false
+	for index in shortcuts.size():
+		if _shortcut_busy[index]:
+			continue
+		var route: Dictionary = shortcuts[index]
+		var entry: Vector2 = route.entry
+		var exit: Vector2 = route.exit
+		var start := entry
+		var destination := exit
+		if character.global_position.distance_to(exit) < character.global_position.distance_to(entry):
+			start = exit
+			destination = entry
+		if character.global_position.distance_to(start) > SHORTCUT_RADIUS:
+			continue
+		_shortcut_busy[index] = true
+		character.is_using_shortcut = true
+		character.velocity = Vector2.ZERO
+		var midpoint := (start + destination) * 0.5 + Vector2(0.0, -90.0)
+		var old_z := character.z_index
+		character.z_index = 5
+		var tween := character.create_tween()
+		tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
+		tween.tween_property(character, "global_position", midpoint, shortcut_use_seconds * 0.5)
+		tween.tween_property(character, "global_position", destination, shortcut_use_seconds * 0.5)
+		tween.finished.connect(_finish_shortcut.bind(index, character, old_z))
+		return true
+	return false
+
+
+func _finish_shortcut(index: int, character: Character, old_z: int) -> void:
+	if index < _shortcut_busy.size():
+		_shortcut_busy[index] = false
+	if is_instance_valid(character):
+		character.is_using_shortcut = false
+		character.z_index = old_z
+		character.velocity = Vector2.ZERO
+
+
+func nearest_shortcut_entry(from: Vector2) -> Vector2:
+	var best := Vector2.ZERO
+	var distance := INF
+	for route in shortcuts:
+		var entry: Vector2 = route.entry
+		var candidate := from.distance_to(entry)
+		if candidate < distance:
+			distance = candidate
+			best = entry
+	return best
+
+
+func escape_shortcut_entry(from: Vector2, threat: Vector2) -> Vector2:
+	var best := Vector2.ZERO
+	var best_score := -INF
+	for route in shortcuts:
+		var entry: Vector2 = route.entry
+		var exit: Vector2 = route.exit
+		var forward_score := exit.distance_to(threat) - from.distance_to(entry)
+		if forward_score > best_score:
+			best_score = forward_score
+			best = entry
+		var reverse_score := entry.distance_to(threat) - from.distance_to(exit)
+		if reverse_score > best_score:
+			best_score = reverse_score
+			best = exit
+	return best
 
 
 func get_bounds() -> Rect2:
@@ -63,12 +214,29 @@ func _build_collision() -> void:
 	add_child(body)
 	for obstacle in obstacles:
 		_add_rect_shape(body, obstacle.rect)
+	var shortcut_barriers := StaticBody2D.new()
+	shortcut_barriers.name = "ShortcutBarriers"
+	shortcut_barriers.collision_layer = 8
+	shortcut_barriers.collision_mask = 0
+	add_child(shortcut_barriers)
+	for route in shortcuts:
+		_add_shortcut_barrier(shortcut_barriers, route.entry)
+		_add_shortcut_barrier(shortcut_barriers, route.exit)
 	var b := get_bounds()
 	var t := WALL_THICKNESS
 	_add_rect_shape(body, Rect2(b.position.x - t, b.position.y - t, b.size.x + 2.0 * t, t))
 	_add_rect_shape(body, Rect2(b.position.x - t, b.end.y, b.size.x + 2.0 * t, t))
 	_add_rect_shape(body, Rect2(b.position.x - t, b.position.y, t, b.size.y))
 	_add_rect_shape(body, Rect2(b.end.x, b.position.y, t, b.size.y))
+
+
+func _add_shortcut_barrier(body: StaticBody2D, point: Vector2) -> void:
+	var shape := CollisionShape2D.new()
+	var circle := CircleShape2D.new()
+	circle.radius = SHORTCUT_RADIUS
+	shape.shape = circle
+	shape.position = point
+	body.add_child(shape)
 
 
 func _add_rect_shape(body: StaticBody2D, rect: Rect2) -> void:
@@ -87,8 +255,16 @@ func _draw() -> void:
 	_draw_surroundings()
 	draw_rect(get_bounds(), ground_color)
 	_draw_ground_details()
+	for route in shortcuts:
+		_draw_shortcut(route.entry)
+		_draw_shortcut(route.exit)
 	for obstacle in obstacles:
 		_draw_obstacle(obstacle)
+
+
+func _draw_shortcut(point: Vector2) -> void:
+	draw_circle(point, SHORTCUT_RADIUS, Color(0.4, 0.15, 0.72, 0.45))
+	draw_arc(point, SHORTCUT_RADIUS - 4.0, 0.0, TAU, 40, Color(0.8, 0.55, 1.0), 5.0)
 
 
 ## Marco de edificios de la ciudad alrededor del mapa (ambientación urbana).

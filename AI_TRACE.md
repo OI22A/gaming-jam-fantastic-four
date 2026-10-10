@@ -61,3 +61,58 @@
   - Exportación Web en modo release generada correctamente (`index.html`, `.wasm`, `.pck`). **No** se probó todavía en un navegador real.
 - **Notas / supuestos:** La IA no tiene acceso al repositorio: no hizo commits ni guardó archivos en él; el equipo debe copiar la base, revisarla y hacer el commit. Interpretación de reglas ambiguas del contexto: la partida es por rondas de eliminación (explota → el portador sale; gana el humano si es el último; pierde si explota en sus manos); el "marcado" lo implementa la recompensa *Radar*.
 - **Commit:** `feat: base del proyecto Papa Caliente 2D (Godot 4.3) con módulos, pruebas y trazabilidad` *(sugerido; completar con el hash real al hacer el commit)*
+
+### AI-002 – Alineación de SRS e implementación de Papa Caliente 2D
+- **Fecha/hora:** 2026-10-10 03:14:46 (America/Bogota)
+- **Participante:** [PENDIENTE: el equipo debe indicar su PARTICIPANT_ID]
+- **Herramienta IA:** Codex, asistente de desarrollo del AI GAME JAM.
+- **Tipo:** AI_ASSISTED
+- **Solicitud (resumen):** Revisar `docs/SRS.md` contra el proyecto actual, implementar los requisitos restantes y aplicar los cambios solicitados por el equipo: conteo de jugadores y POV existentes conservados, minimapa exclusivo de Radar, sin penalizaciones, derrota inmediata del humano y mapas ampliados con atajos animados.
+- **Archivos:** `docs/SRS.md`, `project.godot`, `scripts/ai/bot_character.gd`, `scripts/autoload/{audio_manager,game_events}.gd`, `scripts/bomb/bomb_manager.gd`, `scripts/characters/{character,player_character}.gd`, `scripts/effects/effect_manager.gd`, `scripts/lucky_blocks/{lucky_block,lucky_block_spawner,reward_table}.gd`, `scripts/maps/{city_map,game_map,minimap,park_map}.gd`, `scripts/match/match_controller.gd`, `scripts/tools/export_web.{ps1,sh}`, `scripts/ui/{hud,main_menu}.gd`, `tests/unit/{test_bomb_manager,test_effect_manager,test_input_map,test_maps,test_match_smoke,test_reward_table}.gd`.
+- **Cambio realizado:** Se documentaron las decisiones actuales y se añadieron mapas 1.25×, 10 puntos de aparición, regiones de navegación, atajos de ida y vuelta bloqueados durante animación de 1.2 s y restringidos al no portador, bombas de 60 s, Radar temporal que muestra a todos en minimapa, recompensas sin penalización, rarezas 74/25/1, bloques limitados a cuatro, audio con música/volumen y limpieza de efectos al transferir o terminar. Se ampliaron las pruebas y los scripts de exportación ahora ejecutan la suite antes de exportar.
+- **Verificación:** `git diff --check` pasó. No fue posible ejecutar Godot/GUT ni exportar Web porque Godot no está disponible en PATH. La ejecución del script de pruebas quedó bloqueada por la política de firma de PowerShell; no se cambió ni eludió esa política. `gdformat`/`gdlint` no están instalados. No se probó en navegador real.
+- **Commit:** Pendiente de revisión y commit real por el equipo. Sugerido: `feat: align gameplay with SRS and add animated shortcuts`
+
+### AI-003 – Cierre de requisitos y verificación disponible
+- **Fecha/hora:** 2026-10-10 03:16:33 (America/Bogota)
+- **Participante:** [PENDIENTE: el equipo debe indicar su PARTICIPANT_ID]
+- **Herramienta IA:** Codex, asistente de desarrollo del AI GAME JAM.
+- **Tipo:** TESTING
+- **Solicitud (resumen):** Completar la comparación de requisitos restantes y validar las pruebas funcionales y la posibilidad de ejecución/exportación en el entorno disponible.
+- **Archivos:** `docs/SRS.md`, `scripts/ai/bot_character.gd`, `scripts/bomb/bomb_manager.gd`, `scripts/characters/character.gd`, `scripts/effects/effect_manager.gd`, `scripts/maps/{city_map,game_map}.gd`, `scripts/tools/export_web.{ps1,sh}`, `scripts/ui/hud.gd`, `tests/unit/{test_bomb_manager,test_effect_manager,test_maps,test_match_smoke}.gd`.
+- **Cambio realizado:** Se alinearon navegación y prioridades de IA, bloqueo de portadores en atajos mediante capa de colisión, posiciones seguras en el mapa de ciudad y limpieza de todos los efectos de Radar al transferir la bomba. La exportación Web ejecuta primero la suite GUT.
+- **Verificación:** `git diff --check` pasó. No se pudieron correr GUT, gdformat/gdlint ni la exportación: no están disponibles Godot ni gdtoolkit; la política de firma de PowerShell impide cargar `run_tests.ps1`. La versión Web no se probó en navegador.
+- **Commit:** Pendiente; no se creó ningún commit.
+
+### AI-004 – Corrección de compilación del AudioManager
+- **Fecha/hora:** 2026-10-10 03:19:21 (America/Bogota)
+- **Participante:** [PENDIENTE: el equipo debe indicar su PARTICIPANT_ID]
+- **Herramienta IA:** Codex, asistente de desarrollo del AI GAME JAM.
+- **Tipo:** DEBUGGING
+- **Solicitud (resumen):** Corregir el error de análisis de GDScript reportado al iniciar el proyecto con Godot 4.3.
+- **Archivos:** `scripts/autoload/audio_manager.gd`
+- **Cambio realizado:** Se declaró `notes` como `Array[float]` y `note` como `float` para que Godot pueda inferir y compilar correctamente la generación de música.
+- **Verificación:** `git diff --check` pendiente en este turno. No fue posible volver a iniciar Godot desde este entorno porque no se encontró el ejecutable ni la variable `GODOT`; la ruta solicitada al equipo está pendiente. El error de `MainMenu.set_master_volume` era consecuencia de que falló la carga del autoload.
+- **Commit:** Pendiente; no se creó ningún commit.
+
+### AI-005 – Validación estática del arreglo de AudioManager
+- **Fecha/hora:** 2026-10-10 03:19:44 (America/Bogota)
+- **Participante:** [PENDIENTE: el equipo debe indicar su PARTICIPANT_ID]
+- **Herramienta IA:** Codex, asistente de desarrollo del AI GAME JAM.
+- **Tipo:** TESTING
+- **Solicitud (resumen):** Validar el parche que resuelve el error de inferencia de `note` reportado al arrancar Godot.
+- **Archivos:** `scripts/autoload/audio_manager.gd`
+- **Cambio realizado:** Se verificó que el arreglo tenga tipo explícito y que el parche esté limpio según `git diff --check`.
+- **Verificación:** `git diff --check` pasó. No se pudieron ejecutar GUT ni el proyecto: `GODOT` no está definido en este entorno y no se encontró `godot` en PATH; la ruta de tu instalación está pendiente para validar el arranque real.
+- **Commit:** Pendiente; no se creó ningún commit.
+
+### AI-006 – Validación funcional tras corregir arranque y navegación
+- **Fecha/hora:** 2026-10-10 03:22:24 (America/Bogota)
+- **Participante:** [PENDIENTE: el equipo debe indicar su PARTICIPANT_ID]
+- **Herramienta IA:** Codex, asistente de desarrollo del AI GAME JAM.
+- **Tipo:** DEBUGGING
+- **Solicitud (resumen):** Resolver el error de arranque reportado por el equipo y confirmar pruebas funcionales y ejecución del proyecto.
+- **Archivos:** `scripts/autoload/audio_manager.gd`, `scripts/maps/game_map.gd`, `scripts/ai/bot_character.gd`, `docs/SRS.md`, `AI_TRACE.md`.
+- **Cambio realizado:** Se tipó explícitamente la nota de la música. Se sustituyeron las dos zonas de navegación superpuestas por una zona compartida que evita los accesos de atajo; se actualizó el requisito RF-02.5 para reflejar ese diseño. Los bots sin bomba siguen buscando y usando las entradas animadas, mientras las barreras físicas restringen a los portadores.
+- **Verificación:** Godot 4.3 importó el proyecto; GUT pasó 44/44 pruebas y 481 aserciones. El error de sincronización de navegación desapareció. El proyecto arrancó en headless durante 120 frames con código 0 y sin errores de script. Permanecen avisos deprecados de `make_polygons_from_outlines()`, un aviso de comparación float/int y el aviso del almacén de certificados raíz de este entorno; no bloquearon las pruebas ni el arranque. No se probó ventana gráfica ni navegador real.
+- **Commit:** Pendiente; no se creó ningún commit.

@@ -44,6 +44,7 @@ func setup(
 	_characters_provider = characters_provider
 	_build_ui()
 	_minimap.setup(game_map, characters_provider)
+	_minimap.visible = false
 
 	GameEvents.state_changed.connect(_on_state_changed)
 	GameEvents.countdown_tick.connect(_on_countdown_tick)
@@ -57,7 +58,8 @@ func _process(delta: float) -> void:
 	if _bomb == null:
 		return
 	var time_left := _bomb.time_left if _bomb.running else 0.0
-	_timer_label.text = "BOMBA  %.1f s" % time_left
+	var total_seconds := maxi(0, int(time_left))
+	_timer_label.text = "BOMBA  %02d:%02d" % [int(total_seconds / 60), total_seconds % 60]
 	_timer_label.add_theme_color_override(
 		"font_color", Color(1.0, 0.3, 0.25) if time_left <= 5.0 and _bomb.running else Color.WHITE
 	)
@@ -67,6 +69,8 @@ func _process(delta: float) -> void:
 		_holder_label.text = "La tiene: %s" % _bomb.holder.display_name
 	else:
 		_holder_label.text = ""
+	_minimap.visible = _player.has_bomb and _effects.has_tracking(_player)
+	_minimap.queue_redraw()
 
 	var lines: PackedStringArray = []
 	for effect in _effects.get_active_for(_player):

@@ -37,8 +37,14 @@ func _define_layout() -> void:
 		Vector2(100.0, 980.0),
 		Vector2(1820.0, 980.0),
 		Vector2(960.0, 540.0),
-		Vector2(680.0, 540.0),
+		Vector2(560.0, 540.0),
+		Vector2(680.0, 420.0),
+		Vector2(680.0, 460.0),
+		Vector2(1400.0, 540.0),
+		Vector2(1240.0, 980.0),
 	]
+	add_shortcut(Vector2(680.0, 540.0), Vector2(1350.0, 540.0))
+	add_shortcut(Vector2(680.0, 100.0), Vector2(680.0, 980.0))
 	lucky_block_points = [
 		Vector2(680.0, 300.0),
 		Vector2(1240.0, 300.0),
@@ -50,11 +56,7 @@ func _define_layout() -> void:
 
 
 func _draw_ground_details() -> void:
-	# Aceras alrededor de cada manzana
-	for obstacle in obstacles:
-		if obstacle.kind == "building":
-			var rect: Rect2 = obstacle.rect
-			draw_rect(rect.grow(14.0), Color(0.45, 0.46, 0.5))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2(GameMap.LAYOUT_SCALE, GameMap.LAYOUT_SCALE))
 	# Líneas viales discontinuas
 	var line_color := Color(0.9, 0.9, 0.9, 0.8)
 	var x := 0.0
@@ -66,3 +68,4 @@ func _draw_ground_details() -> void:
 		draw_rect(Rect2(676.0, y, 8.0, 30.0), line_color)
 		draw_rect(Rect2(1236.0, y, 8.0, 30.0), line_color)
 		y += 60.0
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
