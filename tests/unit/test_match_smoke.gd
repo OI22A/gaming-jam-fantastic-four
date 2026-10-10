@@ -29,6 +29,20 @@ func test_match_spawns_player_and_bots() -> void:
 	assert_eq(GameManager.state, GameManager.State.COUNTDOWN)
 
 
+func test_radar_minimap_is_visible_only_while_human_holds_bomb() -> void:
+	var radar: Dictionary = {}
+	for reward in RewardTable.REWARDS:
+		if reward.id == "radar":
+			radar = reward
+	var bot := match_node.characters[1]
+	match_node.bomb.start_round(match_node.player)
+	match_node.effects.apply_reward(match_node.player, radar, [bot])
+	assert_true(match_node.hud._minimap.visible, "Radar debe mostrar el minimapa al aplicarse.")
+	match_node.bomb.transfer_to(bot)
+	assert_false(match_node.effects.has_tracking(match_node.player))
+	assert_false(match_node.hud._minimap.visible, "Transferir la bomba debe ocultarlo de inmediato.")
+
+
 func test_countdown_leads_to_playing_with_one_bomb_holder() -> void:
 	match_node.debug_skip_countdown()
 	await get_tree().process_frame

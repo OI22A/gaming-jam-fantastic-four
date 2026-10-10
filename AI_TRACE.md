@@ -116,3 +116,25 @@
 - **Cambio realizado:** Se tipó explícitamente la nota de la música. Se sustituyeron las dos zonas de navegación superpuestas por una zona compartida que evita los accesos de atajo; se actualizó el requisito RF-02.5 para reflejar ese diseño. Los bots sin bomba siguen buscando y usando las entradas animadas, mientras las barreras físicas restringen a los portadores.
 - **Verificación:** Godot 4.3 importó el proyecto; GUT pasó 44/44 pruebas y 481 aserciones. El error de sincronización de navegación desapareció. El proyecto arrancó en headless durante 120 frames con código 0 y sin errores de script. Permanecen avisos deprecados de `make_polygons_from_outlines()`, un aviso de comparación float/int y el aviso del almacén de certificados raíz de este entorno; no bloquearon las pruebas ni el arranque. No se probó ventana gráfica ni navegador real.
 - **Commit:** Pendiente; no se creó ningún commit.
+
+### AI-007 – Atajos cerrados y activación visible de Radar
+- **Fecha/hora:** 2026-10-10 09:17:49 (America/Bogota)
+- **Participante:** [PENDIENTE: el equipo debe indicar su PARTICIPANT_ID]
+- **Herramienta IA:** Codex, asistente de desarrollo del AI GAME JAM.
+- **Tipo:** AI_ASSISTED
+- **Solicitud (resumen):** Rediseñar los atajos como zonas cerradas de sentido único y asegurar que el minimapa aparezca durante Radar solo para el humano portador; no modificar el comportamiento de los bots.
+- **Archivos:** `scripts/maps/game_map.gd`, `scripts/ui/hud.gd`, `tests/unit/test_maps.gd`, `tests/unit/test_match_smoke.gd`, `docs/SRS.md`, `AI_TRACE.md`.
+- **Cambio realizado:** Se dibujaron corredores cerrados con entrada y salida rotuladas, perímetro y puertas físicas que bloquean a todos los personajes. Solo la entrada inicia el recorrido de animación de 3.2 s; el jugador queda inmóvil, no puede recibir ni transferir la bomba durante el trayecto y la salida no permite reingresar. `BotCharacter` no fue editado; se conserva su uso automático al llegar a una entrada. El HUD actualiza el minimapa por eventos de Radar y transferencia, lo coloca explícitamente en la esquina superior derecha y lo oculta al expirar el efecto o pasar la bomba. El SRS se actualizó.
+- **Verificación:** Godot 4.3 importó el proyecto; GUT pasó 46/46 pruebas y 487 aserciones, incluidas pruebas de salida unidireccional, perímetro cerrado, visibilidad de Radar y ocultamiento inmediato al transferir. `git diff --check` pendiente. Se observaron avisos conocidos de `make_polygons_from_outlines()` obsoleto y del almacén de certificados raíz del entorno; no bloquearon las pruebas. No se probó en navegador real.
+- **Commit:** Pendiente; no se creó ningún commit.
+
+### AI-008 – Cierre de validación
+- **Fecha/hora:** 2026-10-10 09:18:04 (America/Bogota)
+- **Participante:** [PENDIENTE: el equipo debe indicar su PARTICIPANT_ID]
+- **Herramienta IA:** Codex, asistente de desarrollo del AI GAME JAM.
+- **Tipo:** TESTING
+- **Solicitud (resumen):** Cerrar la validación de los cambios de atajos y minimapa.
+- **Archivos:** `AI_TRACE.md`.
+- **Cambio realizado:** Se registró el resultado de la revisión estática final.
+- **Verificación:** `git diff --check` pasó; se retiró el directorio temporal de configuración usado para correr Godot. GUT permanece en 46/46 pruebas.
+- **Commit:** Pendiente; no se creó ningún commit.

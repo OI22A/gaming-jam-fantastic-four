@@ -57,7 +57,8 @@ func test_shortcut_rejects_carrier_and_locks_pair_during_animation() -> void:
 	first.global_position = entry
 	assert_true(map.try_use_shortcut(first))
 	assert_true(first.is_using_shortcut)
-	assert_almost_eq(map.shortcut_use_seconds, 1.2, 0.001)
+	assert_true((first.collision_mask & 1) != 0, "El no portador tampoco debe poder cruzar caminando.")
+	assert_almost_eq(map.shortcut_use_seconds, 3.2, 0.001)
 	var second := Character.new()
 	add_child_autofree(second)
 	second.global_position = entry
@@ -67,5 +68,17 @@ func test_shortcut_rejects_carrier_and_locks_pair_during_animation() -> void:
 	carrier.global_position = entry
 	carrier.has_bomb = true
 	assert_false(map.try_use_shortcut(carrier))
-	assert_true((carrier.collision_mask & 8) != 0, "El portador debe chocar con la barrera del atajo.")
-	assert_eq(map.get_node("ShortcutBarriers").collision_layer, 8)
+	assert_true((carrier.collision_mask & 1) != 0, "El portador debe chocar con la barrera del atajo.")
+	assert_eq(map.get_node("ShortcutBarriers").collision_layer, 1)
+	assert_gte(
+		map.get_node("ShortcutBarriers").get_child_count(), map.shortcuts.size() * 4,
+		"Cada zona segura debe quedar cerrada con laterales y puertas."
+	)
+
+
+func test_shortcut_exit_cannot_be_used_as_an_entry() -> void:
+	var map := _load_map("park")
+	var character := Character.new()
+	add_child_autofree(character)
+	character.global_position = map.shortcuts[0].exit
+	assert_false(map.try_use_shortcut(character), "La salida no debe permitir reingresar.")

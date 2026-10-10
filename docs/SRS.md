@@ -16,7 +16,7 @@ Los valores marcados **[param]** son valores de partida ajustables, no decisione
 | `RESPAWN_BLOCK` | 15 s [param] |
 | `VELOCIDAD_BASE` | 230 px/s |
 | `INTERVALO_IA` | 0.25 s (con variación aleatoria de actualización) |
-| `DURACION_ATAJO` | 1.2 s [param] |
+| `DURACION_ATAJO` | 3.2 s [param] |
 | `TAMANO_MAPA` | 2400 × 1350 px (layout ampliado 1.25×) |
 
 ## Señales (contrato entre módulos)
@@ -80,7 +80,7 @@ Base compartida (`CharacterBody2D`) para el humano y el número de bots configur
 - **RF-03.2** Humano y bots usan la misma escena y velocidad base (230 px/s). Solo cambia la fuente de dirección (teclado o IA).
 - **RF-03.3** Los jugadores colisionan con los obstáculos del mapa y no los atraviesan.
 - **RF-03.4** Al escuchar `bomb_transferred`, se actualiza el rol y la capacidad de usar atajos. El portador no puede activarlos.
-- **RF-03.5** Un no portador cerca de un atajo pulsa E o Espacio y se traslada con una animación de 1.2 s. El par de entradas queda ocupado durante todo el cruce. El jugador no recibe ni transfiere la bomba durante la animación. Un bot no portador puede activar el atajo al alcanzar la entrada.
+- **RF-03.5** El humano no portador debe pulsar E o Espacio al estar junto a la entrada marcada; estar encima no activa el atajo. Los bots conservan su activación automática al alcanzar esa entrada. Cada atajo es una zona cerrada, con una única entrada y una salida de sentido único. Solo la animación controlada de 3.2 s atraviesa la zona: no hay movimiento libre dentro de ella. Ningún personaje puede entrar caminando; el portador choca con el perímetro y no puede activar el acceso. El atajo queda bloqueado durante todo el cruce y el personaje no puede recibir ni transferir la bomba hasta salir. La salida no permite volver a entrar.
 - **RF-03.6** Al ser eliminado, el humano termina la partida inmediatamente; no existe modo fantasma.
 - **RF-03.7** La velocidad es modificable por el sistema de efectos mediante multiplicadores positivos, sin tocar `VELOCIDAD_BASE`.
 
@@ -90,7 +90,7 @@ Base compartida (`CharacterBody2D`) para el humano y el número de bots configur
 - A+D pulsadas a la vez no mueven al jugador.
 - El jugador no atraviesa obstáculos y desliza por las paredes.
 - Al cambiar de pestaña y volver, el jugador no sigue moviéndose solo.
-- El portador no entra al atajo y el no portador sí; mientras un personaje lo usa, nadie más puede iniciar ese mismo par.
+- El portador no entra a la zona cerrada; el no portador debe interactuar con la entrada para iniciar el cruce de 3.2 s. No se puede entrar caminando, volver a entrar por la salida ni moverse libremente durante el cruce. Mientras un personaje lo usa, nadie más puede iniciar ese atajo y no puede recibir ni transferir la bomba.
 - El humano eliminado pasa directamente a resultados, sin observar a los bots.
 
 ---
@@ -99,7 +99,7 @@ Base compartida (`CharacterBody2D`) para el humano y el número de bots configur
 
 - **RF-02.1** Existen 2 escenarios 2D distintos y ampliados (2400 × 1350 px), con obstáculos, zonas de atajo y puntos de aparición.
 - **RF-02.2** Cada mapa tiene 10 puntos de aparición; se usan tantos como jugadores indique el menú.
-- **RF-02.3** Cada mapa contiene al menos dos pares de zonas conectadas por atajo. El portador no puede usarlos; E/Espacio activa el traslado según RF-03.5.
+- **RF-02.3** Cada mapa contiene al menos dos zonas cerradas de atajo, cada una con entrada y salida únicas y en un solo sentido. Solo un no portador puede activar el traslado al interactuar con la entrada según RF-03.5.
 - **RF-02.4** Cada mapa define puntos de aparición de Lucky Blocks (≥ `MAX_LUCKY_BLOCKS`).
 - **RF-02.5** Cada mapa genera una zona navegable (`NavigationRegion2D`) que excluye obstáculos y entradas de atajo. Los bots sin bomba pueden buscar una entrada y usar la animación del atajo; los portadores quedan impedidos por las barreras físicas.
 - **RF-02.6** Los dos mapas son visualmente distintos.
@@ -216,9 +216,9 @@ Base compartida (`CharacterBody2D`) para el humano y el número de bots configur
 
 ## 9. RF-08 Minimapa
 
-- **RF-08.1** El minimapa se ubica arriba a la derecha y permanece oculto excepto mientras el humano tenga activo el efecto Radar.
+- **RF-08.1** El minimapa se ubica arriba a la derecha, en una capa visible sobre el HUD, y permanece oculto excepto mientras el humano que lleva la bomba tenga activo el efecto Radar.
 - **RF-08.2** Durante Radar muestra el mapa de referencia y la posición de todos los personajes vivos; el humano se distingue visualmente.
-- **RF-08.3** Al vencer Radar o transferirse la bomba, el minimapa se oculta. Los Lucky Blocks no se dibujan en él.
+- **RF-08.3** Al vencer Radar o transferirse la bomba, el minimapa se oculta inmediatamente. Los Lucky Blocks no se dibujan en él.
 - **RF-08.4** El rastreo y el minimapa duran `DURACION_EFECTO` (10 s).
 
 **Aceptación:** al transferirse la bomba, el minimapa del humano cambia en el mismo frame.

@@ -10,19 +10,22 @@ extends Node2D
 
 const WALL_THICKNESS := 200.0
 const LAYOUT_SCALE := 1.25
-const SHORTCUT_RADIUS := 56.0
+const SHORTCUT_INTERACTION_RADIUS := 56.0
+const SHORTCUT_WIDTH := 96.0
+const SHORTCUT_GATE_DEPTH := 34.0
+const SHORTCUT_WALL_THICKNESS := 12.0
 
 @export var map_id := "map"
 @export var display_name := "Mapa"
 @export var map_size := Vector2(2400.0, 1350.0)
-@export var shortcut_use_seconds := 1.2
+@export var shortcut_use_seconds := 3.2
 @export var ground_color := Color(0.35, 0.6, 0.3)
 
 ## Cada obstáculo: {rect: Rect2, kind: String, color: Color}
 var obstacles: Array[Dictionary] = []
 var spawn_points: Array[Vector2] = []
 var lucky_block_points: Array[Vector2] = []
-## Cada atajo conecta dos zonas y se bloquea durante la animación de uso.
+## Cada atajo tiene una entrada interactiva, una salida y un corredor cerrado.
 var shortcuts: Array[Dictionary] = []
 var _shortcut_busy: Array[bool] = []
 
@@ -127,23 +130,16 @@ func try_use_shortcut(character: Character) -> bool:
 		var route: Dictionary = shortcuts[index]
 		var entry: Vector2 = route.entry
 		var exit: Vector2 = route.exit
-		var start := entry
-		var destination := exit
-		if character.global_position.distance_to(exit) < character.global_position.distance_to(entry):
-			start = exit
-			destination = entry
-		if character.global_position.distance_to(start) > SHORTCUT_RADIUS:
+		if character.global_position.distance_to(entry) > SHORTCUT_INTERACTION_RADIUS:
 			continue
 		_shortcut_busy[index] = true
 		character.is_using_shortcut = true
 		character.velocity = Vector2.ZERO
-		var midpoint := (start + destination) * 0.5 + Vector2(0.0, -90.0)
 		var old_z := character.z_index
-		character.z_index = 5
+		character.z_index = 20
 		var tween := character.create_tween()
-		tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
-		tween.tween_property(character, "global_position", midpoint, shortcut_use_seconds * 0.5)
-		tween.tween_property(character, "global_position", destination, shortcut_use_seconds * 0.5)
+		tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		tween.tween_property(character, "global_position", exit, shortcut_use_seconds)
 		tween.finished.connect(_finish_shortcut.bind(index, character, old_z))
 		return true
 	return false
@@ -176,14 +172,10 @@ func escape_shortcut_entry(from: Vector2, threat: Vector2) -> Vector2:
 	for route in shortcuts:
 		var entry: Vector2 = route.entry
 		var exit: Vector2 = route.exit
-		var forward_score := exit.distance_to(threat) - from.distance_to(entry)
-		if forward_score > best_score:
-			best_score = forward_score
+		var score := exit.distance_to(threat) - from.distance_to(entry)
+		if score > best_score:
+			best_score = score
 			best = entry
-		var reverse_score := entry.distance_to(threat) - from.distance_to(exit)
-		if reverse_score > best_score:
-			best_score = reverse_score
-			best = exit
 	return best
 
 
@@ -216,12 +208,11 @@ func _build_collision() -> void:
 		_add_rect_shape(body, obstacle.rect)
 	var shortcut_barriers := StaticBody2D.new()
 	shortcut_barriers.name = "ShortcutBarriers"
-	shortcut_barriers.collision_layer = 8
+	shortcut_barriers.collision_layer = 1
 	shortcut_barriers.collision_mask = 0
 	add_child(shortcut_barriers)
 	for route in shortcuts:
-		_add_shortcut_barrier(shortcut_barriers, route.entry)
-		_add_shortcut_barrier(shortcut_barriers, route.exit)
+		_add_shortcut_walls(shortcut_barriers, route.entry, route.exit)
 	var b := get_bounds()
 	var t := WALL_THICKNESS
 	_add_rect_shape(body, Rect2(b.position.x - t, b.position.y - t, b.size.x + 2.0 * t, t))
@@ -230,12 +221,27 @@ func _build_collision() -> void:
 	_add_rect_shape(body, Rect2(b.end.x, b.position.y, t, b.size.y))
 
 
-func _add_shortcut_barrier(body: StaticBody2D, point: Vector2) -> void:
+func _add_shortcut_walls(body: StaticBody2D, entry: Vector2, exit: Vector2) -> void:
+	var direction := (exit - entry).normalized()
+	var side := direction.orthogonal() * (SHORTCUT_WIDTH * 0.5)
+	var entry_gate := entry + direction * SHORTCUT_GATE_DEPTH
+	var exit_gate := exit - direction * SHORTCUT_GATE_DEPTH
+	_add_wall_segment(body, entry_gate + side, exit_gate + side, SHORTCUT_WALL_THICKNESS)
+	_add_wall_segment(body, entry_gate - side, exit_gate - side, SHORTCUT_WALL_THICKNESS)
+	_add_wall_segment(body, entry_gate + side, entry_gate - side, SHORTCUT_WALL_THICKNESS)
+	_add_wall_segment(body, exit_gate + side, exit_gate - side, SHORTCUT_WALL_THICKNESS)
+
+
+func _add_wall_segment(
+	body: StaticBody2D, start: Vector2, end: Vector2, thickness: float
+) -> void:
 	var shape := CollisionShape2D.new()
-	var circle := CircleShape2D.new()
-	circle.radius = SHORTCUT_RADIUS
-	shape.shape = circle
-	shape.position = point
+	var rectangle := RectangleShape2D.new()
+	var delta := end - start
+	rectangle.size = Vector2(delta.length(), thickness)
+	shape.shape = rectangle
+	shape.position = (start + end) * 0.5
+	shape.rotation = delta.angle()
 	body.add_child(shape)
 
 
@@ -256,15 +262,47 @@ func _draw() -> void:
 	draw_rect(get_bounds(), ground_color)
 	_draw_ground_details()
 	for route in shortcuts:
-		_draw_shortcut(route.entry)
-		_draw_shortcut(route.exit)
+		_draw_shortcut(route.entry, route.exit)
 	for obstacle in obstacles:
 		_draw_obstacle(obstacle)
 
 
-func _draw_shortcut(point: Vector2) -> void:
-	draw_circle(point, SHORTCUT_RADIUS, Color(0.4, 0.15, 0.72, 0.45))
-	draw_arc(point, SHORTCUT_RADIUS - 4.0, 0.0, TAU, 40, Color(0.8, 0.55, 1.0), 5.0)
+func _draw_shortcut(entry: Vector2, exit: Vector2) -> void:
+	var direction := (exit - entry).normalized()
+	var side := direction.orthogonal() * (SHORTCUT_WIDTH * 0.5)
+	var corridor := PackedVector2Array(
+		[entry + side, exit + side, exit - side, entry - side]
+	)
+	draw_colored_polygon(corridor, Color(0.19, 0.1, 0.32, 0.9))
+	draw_polyline(
+		PackedVector2Array([entry + side, exit + side, exit - side, entry - side, entry + side]),
+		Color(0.8, 0.55, 1.0),
+		6.0
+	)
+	var entry_gate := entry + direction * SHORTCUT_GATE_DEPTH
+	var exit_gate := exit - direction * SHORTCUT_GATE_DEPTH
+	draw_line(entry_gate + side, entry_gate - side, Color(1.0, 0.78, 0.25), 8.0)
+	draw_line(exit_gate + side, exit_gate - side, Color(0.4, 0.9, 1.0), 8.0)
+	draw_circle(entry, 15.0, Color(1.0, 0.78, 0.25))
+	draw_circle(exit, 15.0, Color(0.4, 0.9, 1.0))
+	draw_string(
+		ThemeDB.fallback_font,
+		entry + Vector2(18.0, -16.0),
+		"ENTRADA",
+		HORIZONTAL_ALIGNMENT_LEFT,
+		-1.0,
+		16,
+		Color.WHITE
+	)
+	draw_string(
+		ThemeDB.fallback_font,
+		exit + Vector2(18.0, -16.0),
+		"SALIDA",
+		HORIZONTAL_ALIGNMENT_LEFT,
+		-1.0,
+		16,
+		Color.WHITE
+	)
 
 
 ## Marco de edificios de la ciudad alrededor del mapa (ambientación urbana).
