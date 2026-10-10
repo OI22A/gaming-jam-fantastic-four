@@ -1,10 +1,12 @@
 class_name MainMenu
 extends CanvasLayer
 ## Menú principal con la portada del juego: la imagen ya trae el título "Papa FF", así
-## que debajo se colocan los controles (jugar, volumen y bots rivales) con un estilo
-## que imita al título: formas negras inclinadas, texto blanco y acentos amarillo/naranja.
+## que debajo se colocan los controles (jugar, 2 jugadores, volumen y bots rivales) con un
+## estilo que imita al título: formas negras inclinadas, texto blanco y acentos amarillo/naranja.
+##
+## "Jugar" y "2 Jugadores" no inician la partida: primero muestran las reglas y esperan a
+## que el jugador pulse "¡Entendido!" (ver RulesScreen).
 
-const RulesScreenScript := preload("res://scripts/ui/rules_screen.gd")
 const COVER_PATH := "res://assets/art/ui/portada.png"
 const COLOR_BLACK := Color(0.04, 0.04, 0.05, 0.9)
 const COLOR_YELLOW := Color(1.0, 0.82, 0.12)
@@ -15,13 +17,19 @@ const COLOR_ORANGE_DARK := Color(0.82, 0.3, 0.04)
 const BUTTON_SKEW := Vector2(-0.2, 0.0)
 const FONT_SLANT := 0.2
 ## Zona de la portada (proporción de la pantalla) libre debajo del título.
-const AREA_LEFT := 0.56
+const AREA_LEFT := 0.54
 const AREA_TOP := 0.655
-const AREA_RIGHT := 0.92
-const AREA_BOTTOM := 0.96
+const AREA_RIGHT := 0.94
+const AREA_BOTTOM := 0.97
 
-var _play_button: Button
-var _rules: CanvasLayer
+## Se rellena mientras se muestran las reglas (entre pulsar "Jugar" y empezar la partida).
+var rules_screen: RulesScreen
+var play_button: Button
+var two_players_button: Button
+
+var _pending_two_players := false
+var _volume_slider: HSlider
+var _bots_spin: SpinBox
 
 
 func _ready() -> void:
@@ -48,13 +56,27 @@ func _ready() -> void:
 	box.anchor_bottom = AREA_BOTTOM
 	add_child(box)
 
-	_play_button = Button.new()
-	_play_button.text = "¡JUGAR!"
-	_play_button.custom_minimum_size = Vector2(0.0, 62.0)
-	_play_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	_style_button(_play_button, font)
-	_play_button.pressed.connect(_on_play_pressed)
-	box.add_child(_play_button)
+	var play_row := HBoxContainer.new()
+	play_row.add_theme_constant_override("separation", 12)
+	box.add_child(play_row)
+
+	play_button = Button.new()
+	play_button.text = "¡JUGAR!"
+	play_button.custom_minimum_size = Vector2(0.0, 56.0)
+	play_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	play_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_style_button(play_button, font, 28)
+	play_button.pressed.connect(_on_play_pressed.bind(false))
+	play_row.add_child(play_button)
+
+	two_players_button = Button.new()
+	two_players_button.text = "2 JUGADORES"
+	two_players_button.custom_minimum_size = Vector2(0.0, 56.0)
+	two_players_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	two_players_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_style_button(two_players_button, font, 28)
+	two_players_button.pressed.connect(_on_play_pressed.bind(true))
+	play_row.add_child(two_players_button)
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override(
@@ -69,28 +91,28 @@ func _ready() -> void:
 	panel.add_child(options)
 
 	options.add_child(_make_option_label("VOLUMEN", font))
-	var volume := HSlider.new()
-	volume.min_value = 0.0
-	volume.max_value = 1.0
-	volume.step = 0.05
-	volume.value = 0.8
-	volume.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	volume.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	volume.value_changed.connect(AudioManager.set_master_volume)
-	AudioManager.set_master_volume(volume.value)
-	options.add_child(volume)
+	_volume_slider = HSlider.new()
+	_volume_slider.min_value = 0.0
+	_volume_slider.max_value = 1.0
+	_volume_slider.step = 0.05
+	_volume_slider.value = 0.8
+	_volume_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_volume_slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_volume_slider.value_changed.connect(AudioManager.set_master_volume)
+	AudioManager.set_master_volume(_volume_slider.value)
+	options.add_child(_volume_slider)
 
 	options.add_child(_make_option_label("BOTS RIVALES", font))
-	var bots_spin := SpinBox.new()
-	bots_spin.min_value = GameManager.MIN_BOTS
-	bots_spin.max_value = GameManager.MAX_BOTS
-	bots_spin.value = GameManager.bot_count
-	bots_spin.value_changed.connect(func(v: float) -> void: GameManager.bot_count = int(v))
-	options.add_child(bots_spin)
+	_bots_spin = SpinBox.new()
+	_bots_spin.min_value = GameManager.MIN_BOTS
+	_bots_spin.max_value = GameManager.MAX_BOTS
+	_bots_spin.value = GameManager.bot_count
+	_bots_spin.value_changed.connect(func(v: float) -> void: GameManager.bot_count = int(v))
+	options.add_child(_bots_spin)
 
 	var help := Label.new()
 	help.text = (
-		"Mover: WASD / Flechas   ·   Atajo sin bomba: E / Espacio"
+		"1 jugador: WASD / Flechas, atajo E / Espacio   ·   2 jugadores: P1 WASD + E, P2 Flechas + Espacio"
 		+ "   ·   Pausa: Esc   ·   Reiniciar: R"
 	)
 	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -108,27 +130,41 @@ func _ready() -> void:
 		Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 16
 	)
 
-	_play_button.grab_focus()
+	play_button.grab_focus()
 
 
-## "Jugar" abre las reglas; la partida solo empieza al confirmarlas.
-func _on_play_pressed() -> void:
-	if _rules != null:
+## "Jugar" / "2 Jugadores" no inician la partida: primero muestran las reglas (y en 2 jugadores
+## los controles de P1 y P2) y esperan a "¡Entendido!".
+func _on_play_pressed(two_players: bool = false) -> void:
+	if rules_screen != null:
 		return
-	_rules = RulesScreenScript.new()
-	_rules.confirmed.connect(_on_rules_confirmed)
-	_rules.cancelled.connect(_on_rules_cancelled)
-	add_child(_rules)
+	_pending_two_players = two_players
+	_set_menu_enabled(false)
+	rules_screen = RulesScreen.new()
+	rules_screen.two_players = two_players
+	rules_screen.confirmed.connect(_on_rules_confirmed)
+	rules_screen.cancelled.connect(_on_rules_cancelled)
+	add_child(rules_screen)
 
 
 func _on_rules_confirmed() -> void:
+	GameManager.two_players = _pending_two_players
 	GameManager.start_match(GameManager.DEFAULT_MAP_ID)
 
 
 func _on_rules_cancelled() -> void:
-	_rules.queue_free()
-	_rules = null
-	_play_button.grab_focus()
+	rules_screen.queue_free()
+	rules_screen = null
+	_set_menu_enabled(true)
+	play_button.grab_focus()
+
+
+## Mientras las reglas están abiertas, el menú de fondo no debe poder usarse (ni con Tab).
+func _set_menu_enabled(enabled: bool) -> void:
+	play_button.disabled = not enabled
+	two_players_button.disabled = not enabled
+	_bots_spin.editable = enabled
+	_volume_slider.editable = enabled
 
 
 ## Letra gruesa e inclinada a partir de la fuente por defecto (funciona también en Web).
@@ -154,13 +190,14 @@ func _make_box(fill: Color, border: Color, border_width: int, skew: Vector2) -> 
 
 
 ## Negro con borde amarillo; al pasar el ratón se vuelve naranja con letra negra.
-func _style_button(button: Button, font: Font) -> void:
+func _style_button(button: Button, font: Font, font_size: int) -> void:
 	button.add_theme_font_override("font", font)
-	button.add_theme_font_size_override("font_size", 34)
+	button.add_theme_font_size_override("font_size", font_size)
 	button.add_theme_color_override("font_color", Color.WHITE)
 	button.add_theme_color_override("font_focus_color", Color.WHITE)
 	button.add_theme_color_override("font_hover_color", Color.BLACK)
 	button.add_theme_color_override("font_pressed_color", Color.BLACK)
+	button.add_theme_color_override("font_disabled_color", Color(0.6, 0.6, 0.6))
 	button.add_theme_stylebox_override(
 		"normal", _make_box(COLOR_BLACK, COLOR_YELLOW, 3, BUTTON_SKEW)
 	)
@@ -172,6 +209,9 @@ func _style_button(button: Button, font: Font) -> void:
 	)
 	button.add_theme_stylebox_override(
 		"pressed", _make_box(COLOR_ORANGE_DARK, COLOR_YELLOW, 3, BUTTON_SKEW)
+	)
+	button.add_theme_stylebox_override(
+		"disabled", _make_box(Color(0.08, 0.08, 0.09, 0.9), Color(0.4, 0.4, 0.4), 3, BUTTON_SKEW)
 	)
 
 

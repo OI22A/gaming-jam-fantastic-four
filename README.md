@@ -1,6 +1,6 @@
 # Papa Caliente 2D
 
-Videojuego 2D inspirado en la "papa caliente": un jugador humano compite contra bots por no quedarse con la bomba
+Videojuego 2D inspirado en la "papa caliente": un jugador humano (o **dos, en el mismo teclado**) compite contra bots por no quedarse con la bomba
 cuando se acaba el temporizador. En el parque (ambientación de ciudad) aparecen **Lucky Blocks** que dan efectos
 aleatorios —de distinta rareza— a quien lleva la bomba.
 
@@ -151,7 +151,8 @@ inferior **GUT** → *Run All*.
 | Pausar / reanudar | `Esc` (o `P`) |
 | Reiniciar la partida | `R` |
 
-1. Elige el mapa y el número de bots en el menú.
+1. Elige el número de bots en el menú y pulsa **Jugar** (1 jugador) o **2 Jugadores**.
+   Antes de empezar se muestra una pantalla con las reglas y los controles.
 2. Tras la cuenta regresiva, un personaje al azar recibe la bomba. **Tócalo a otro para pasársela**
    (hay un breve enfriamiento tras cada transferencia).
 3. Quien tiene la bomba puede recoger **Lucky Blocks** (cuadros amarillos con `?`): dan efectos de distinta rareza
@@ -183,6 +184,20 @@ Notas importantes:
 - Para publicar (itch.io, GitHub Pages…) sube el **contenido** de `build/web/` (con `index.html` en la raíz).
 - La carpeta `build/` no se versiona; se regenera cuando haga falta.
 
+### Modo 2 jugadores
+
+Misma pantalla, sin dividirla: la cámara se centra entre P1 y P2 y se aleja o acerca para que ambos se vean siempre.
+
+| Jugador | Mover | Atajo |
+|---|---|---|
+| **P1** (azul) | `W A S D` | `E` |
+| **P2** (turquesa) | Flechas | `Espacio` |
+
+- Si un jugador muere, el otro sigue y, desde la ronda siguiente, la cámara solo lo enfoca a él. Si mueren los dos, es derrota.
+- Gana el último jugador en pie: se muestra "¡GANÓ P1!" o "¡GANÓ P2!", con las opciones de siempre (jugar de nuevo / menú).
+- Solo quien tiene la bomba recibe los efectos de los Lucky Blocks, pero ambos ven los bloques y las habilidades activas.
+- Detalle completo en `docs/SRS.md` (RF-11).
+
 ---
 
 ## 5. Estructura del proyecto
@@ -197,7 +212,8 @@ Notas importantes:
 ├── scripts/
 │   ├── autoload/            GameEvents (bus), GameManager (estados), AudioManager
 │   ├── match/               MatchController: rondas, eliminación, cámara, HUD
-│   ├── characters/          Character (base) y PlayerCharacter
+│   ├── camera/              DualCamera (cámara compartida del modo 2 jugadores)
+│   ├── characters/          Character (base) y PlayerCharacter (1 jugador, P1 o P2)
 │   ├── ai/                  BotCharacter (IA)
 │   ├── bomb/                BombManager (temporizador y transferencia)
 │   ├── lucky_blocks/        LuckyBlock, spawner y RewardTable (rarezas y probabilidades)
@@ -216,6 +232,7 @@ Notas importantes:
 | Gestión de partidas | `autoload/game_manager.gd`, `match/match_controller.gd` | RF-01 |
 | Mapas y minimapa | `maps/*` | RF-02, RF-08 |
 | Control de jugadores | `characters/*` | RF-03 |
+| Modo 2 jugadores y cámara compartida | `camera/dual_camera.gd`, `match/match_controller.gd`, `ui/*` | RF-11 |
 | Inteligencia artificial | `ai/bot_character.gd` | RF-04 |
 | Gestión de la bomba | `bomb/bomb_manager.gd` | RF-05 |
 | Lucky Blocks | `lucky_blocks/*` | RF-06 |

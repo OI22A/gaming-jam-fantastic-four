@@ -39,6 +39,8 @@ func _draw() -> void:
 			continue
 		var point := character.global_position * factor
 		if character is PlayerCharacter:
-			draw_circle(point, 5.0, Color(0.3, 0.65, 1.0))
+			# En 2 jugadores cada uno se ve con su color (P1 / P2); en 1 jugador, azul como siempre.
+			var dot := character.body_color if GameManager.two_players else Color(0.3, 0.65, 1.0)
+			draw_circle(point, 5.0, dot)
 		else:
 			draw_circle(point, 3.5, Color(0.7, 0.7, 0.7))

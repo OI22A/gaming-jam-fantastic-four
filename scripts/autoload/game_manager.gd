@@ -25,6 +25,10 @@ var current_map_id := DEFAULT_MAP_ID
 var round_number := 0
 var player_won := false
 var bot_count := 3
+## Modo de juego elegido en el menú: false = 1 jugador, true = 2 jugadores (P1 y P2).
+var two_players := false
+## En modo 2 jugadores: "P1" o "P2" si ganó uno de ellos; "" si no hay ganador humano.
+var winner_label := ""
 
 var _state_before_pause: State = State.MENU
 
@@ -58,6 +62,7 @@ func start_match(map_id: String = "") -> void:
 		current_map_id = map_id
 	round_number = 0
 	player_won = false
+	winner_label = ""
 	get_tree().paused = false
 	set_state(State.COUNTDOWN)
 	GameEvents.match_requested.emit(current_map_id)
@@ -67,8 +72,10 @@ func restart_match() -> void:
 	start_match(current_map_id)
 
 
-func end_match(won: bool) -> void:
+## `winner` es la etiqueta del jugador ganador en modo 2 jugadores ("P1" / "P2").
+func end_match(won: bool, winner: String = "") -> void:
 	player_won = won
+	winner_label = winner if won else ""
 	set_state(State.ENDED)
 	GameEvents.match_ended.emit(won)
 
@@ -95,3 +102,5 @@ func reset() -> void:
 	state = State.MENU
 	round_number = 0
 	player_won = false
+	winner_label = ""
+	two_players = false
