@@ -6,7 +6,15 @@ extends Camera2D
 ## todos aparezcan siempre en pantalla: si se separan se aleja, si se juntan se acerca.
 ## Con un solo objetivo (el otro jugador murió) simplemente lo sigue con el zoom normal.
 ##
+## La cámara NO tiene límites de mapa: el zoom puede alejarse hasta mostrar el mapa completo
+## (más el margen) aunque cada jugador esté en una esquina opuesta. Lo que quede fuera del mapa
+## se ve negro (ver `TiledMap.OutsideMask`); los jugadores no pueden salir porque el mapa tiene
+## paredes perimetrales.
+##
 ## Todo el suavizado depende de `delta` (no de frames).
+
+## Zoom mínimo de respaldo si todavía no se llamó a `set_bounds`.
+const FALLBACK_MIN_ZOOM := 0.2
 
 ## Margen (en píxeles de mundo) entre los jugadores y el borde de la pantalla.
 @export var margin := 220.0
@@ -16,7 +24,7 @@ extends Camera2D
 @export var zoom_speed := 4.0
 
 var _targets: Array[Node2D] = []
-var _min_zoom := 0.2
+var _bounds := Rect2()
 
 
 func _ready() -> void:
@@ -24,14 +32,18 @@ func _ready() -> void:
 	position_smoothing_speed = 6.0
 
 
-## Límites del mapa: la cámara no se sale de ellos y el zoom mínimo muestra el mapa entero.
+## Guarda el rectángulo del mapa. Ya NO se usan `limit_*` de Camera2D: así la cámara puede
+## centrarse en el punto medio aunque eso muestre zonas fuera del mapa (se ven en negro).
 func set_bounds(bounds: Rect2) -> void:
-	limit_left = int(bounds.position.x)
-	limit_top = int(bounds.position.y)
-	limit_right = int(bounds.end.x)
-	limit_bottom = int(bounds.end.y)
-	var view := get_viewport_rect().size
-	_min_zoom = maxf(view.x / bounds.size.x, view.y / bounds.size.y)
+	_bounds = bounds
+
+
+## Zoom más lejano que usa la cámara: el que muestra el mapa completo más el margen.
+## Como los jugadores nunca salen del mapa, con este zoom siempre caben los dos.
+func min_zoom_for(view_size: Vector2) -> float:
+	if _bounds.size.x <= 0.0 or _bounds.size.y <= 0.0:
+		return FALLBACK_MIN_ZOOM
+	return minf(_fit_zoom(_bounds.size, view_size), max_zoom)
 
 
 ## Jugadores que debe enfocar la cámara (se cambia al empezar cada ronda).
@@ -45,9 +57,12 @@ func get_targets() -> Array[Node2D]:
 
 ## Zoom necesario para que `rect` (más el margen) quepa en `view_size`.
 func zoom_for_rect(rect: Rect2, view_size: Vector2) -> float:
-	var needed := Vector2(rect.size.x + margin * 2.0, rect.size.y + margin * 2.0)
-	var fit := minf(view_size.x / needed.x, view_size.y / needed.y)
-	return clampf(fit, _min_zoom, max_zoom)
+	return clampf(_fit_zoom(rect.size, view_size), min_zoom_for(view_size), max_zoom)
+
+
+func _fit_zoom(extent: Vector2, view_size: Vector2) -> float:
+	var needed := extent + Vector2(margin, margin) * 2.0
+	return minf(view_size.x / needed.x, view_size.y / needed.y)
 
 
 func _process(delta: float) -> void:

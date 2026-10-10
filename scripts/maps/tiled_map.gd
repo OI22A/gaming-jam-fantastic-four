@@ -60,6 +60,7 @@ func _init() -> void:
 func _ready() -> void:
 	super._ready()
 	_build_tile_layers()
+	_build_outside_mask()
 
 
 func _define_layout() -> void:
@@ -129,6 +130,17 @@ func _build_tile_layers() -> void:
 		add_child(overlay)
 
 
+## Cubre de negro todo lo que queda fuera del mapa (la cámara compartida del modo 2 jugadores
+## puede mostrar esa zona). z_index 1: tapa las capas de tiles (z 0), que pueden sobresalir del
+## borde, pero queda por debajo de los personajes (z 2) y de los techos (z 3).
+func _build_outside_mask() -> void:
+	var mask := OutsideMask.new()
+	mask.name = "OutsideMask"
+	mask.bounds = get_bounds()
+	mask.z_index = 1
+	add_child(mask)
+
+
 func _is_empty_layer(gids: PackedInt32Array) -> bool:
 	for gid in gids:
 		if gid != 0:
@@ -136,9 +148,10 @@ func _is_empty_layer(gids: PackedInt32Array) -> bool:
 	return true
 
 
-## Solo el color de fondo de Tiled: el arte lo dibujan las capas de tiles.
+## Solo el color de fondo de Tiled dentro del mapa: el arte lo dibujan las capas de tiles.
+## Fuera del mapa no se pinta nada aquí (lo cubre `OutsideMask` y el resto es el fondo negro).
 func _draw() -> void:
-	draw_rect(get_bounds().grow(400.0), _background)
+	draw_rect(get_bounds(), _background)
 
 
 ## Dibuja una capa de tiles. Cada tile se alinea abajo a la izquierda de su celda,
@@ -162,6 +175,25 @@ class TileLayerNode:
 			var cell := Vector2((index % columns) * tile_size.x, (index / columns) * tile_size.y)
 			var position := Vector2(cell.x, cell.y + tile_size.y - region.size.y) + offset
 			draw_texture_rect_region(texture, Rect2(position, region.size), region)
+
+
+## Cuatro rectángulos negros alrededor del mapa. Nunca se ve en el modo 1 jugador (la cámara
+## de seguimiento no sale del mapa); en 2 jugadores es lo que se ve fuera de los bordes.
+class OutsideMask:
+	extends Node2D
+
+	## Cuánto se extiende la máscara más allá de cada borde (más que cualquier vista posible).
+	const EXTENT := 6000.0
+
+	var bounds := Rect2()
+
+	func _draw() -> void:
+		var e := EXTENT
+		var b := bounds
+		draw_rect(Rect2(b.position.x - e, b.position.y - e, b.size.x + 2.0 * e, e), Color.BLACK)
+		draw_rect(Rect2(b.position.x - e, b.end.y, b.size.x + 2.0 * e, e), Color.BLACK)
+		draw_rect(Rect2(b.position.x - e, b.position.y, e, b.size.y), Color.BLACK)
+		draw_rect(Rect2(b.end.x, b.position.y, e, b.size.y), Color.BLACK)
 
 
 ## Marcas de entrada (amarillo) y salida (celeste) de cada atajo.
