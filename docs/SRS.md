@@ -128,7 +128,7 @@ Base compartida (`CharacterBody2D`) para el humano y el número de bots configur
 ## 4. RF-01 Gestión de partidas
 
 - **RF-01.1** Estados: `MENÚ → JUGANDO → TERMINADA`. La partida se inicia desde el menú.
-- **RF-01.2** Al iniciar: carga el mapa seleccionado, instancia 1 humano + 1–5 bots (inicial 3), asigna puntos de aparición y arranca la bomba.
+- **RF-01.2** Al iniciar: carga el mapa seleccionado, instancia 1 humano + 1–10 bots (inicial 3), asigna puntos de aparición y arranca la bomba.
 - **RF-01.3** Al recibir `character_eliminated`, se marca al jugador fuera. Si es el humano, la partida termina y se muestran resultados.
 - **RF-01.4** La partida termina al morir el humano o cuando no quedan bots vivos; emite `match_ended(player_won)`.
 - **RF-01.5** Victoria si el ganador es el humano. Derrota y fin inmediato si fue eliminado.

@@ -18,7 +18,7 @@ const MAPS := {
 	"tiled": {"name": "Mapa del Barrio", "scene": "res://scenes/maps/tiled_map.tscn"},
 }
 const MIN_BOTS := 1
-const MAX_BOTS := 5
+const MAX_BOTS := 10
 
 var state: State = State.MENU
 var current_map_id := DEFAULT_MAP_ID
