@@ -130,6 +130,13 @@ Base compartida (`CharacterBody2D`) para el humano y los 9 bots.
 - **RF-01.4** La partida termina cuando queda 1 vivo y emite `partida_terminada(ganador)`.
 - **RF-01.5** Victoria si el ganador es el humano. Derrota si fue eliminado; el fantasma observa hasta que termine la partida.
 - **RF-01.6** Reiniciar limpia efectos, bloques y jugadores, y comienza una partida nueva.
+- **RF-01.7 Máquina de Estados Global (`GameManager.State`):** El sistema debe regirse estrictamente por una máquina de estados centralizada que controle el flujo del juego, ignorando inputs no correspondientes al estado activo:
+  - `MENU`: Estado inicial. Transiciona a `COUNTDOWN` mediante la señal `match_requested`.
+  - `COUNTDOWN`: Cuenta regresiva de congelamiento (3 segundos). Transiciona a `PLAYING`.
+  - `PLAYING`: Estado de juego activo. Puede pausarse (`PAUSED`) con la tecla `Esc` o transicionar a `ROUND_END` tras la explosión de la bomba.
+  - `PAUSED`: Suspende temporalmente el procesamiento del juego. Devuelve a `PLAYING` con `Esc` o a `MENU` mediante `go_to_menu()`.
+  - `ROUND_END`: Pausa técnica de 2 segundos tras una eliminación. Si quedan bots vivos, regresa a `COUNTDOWN` para la nueva ronda; si el humano muere o no quedan bots, avanza a `ENDED`.
+  - `ENDED`: Pantalla de resultados finales. La tecla `R` transiciona de vuelta a `COUNTDOWN`.
 
 **Aceptación:** la partida no termina antes de quedar un solo vivo. Reiniciar no deja estado de la partida anterior.
 
@@ -234,6 +241,38 @@ Base compartida (`CharacterBody2D`) para el humano y los 9 bots.
 - **RF-10.2** No requiere instalación: se abre desde una URL.
 - **RF-10.3** Framerate estable con 10 jugadores (9 bots de IA).
 - **RF-10.4** Se prueba una exportación en cada fase, empezando por la Fase 1.
+
+---
+## 12. Interfaces de Software y Restricciones Técnicas
+
+### 12.1 Contrato del Bus de Eventos Global (`GameEvents`)
+Para garantizar el desacoplamiento total de los módulos, el software debe implementar un patrón *Observer* (Autoload global `GameEvents`). Queda estrictamente prohibido el acoplamiento directo (llamadas a métodos) entre módulos transversales. El sistema se comunicará mediante las siguientes señales clave:
+
+| Categoría | Señal | Origen / Emisor | Componentes que Escuchan |
+|---|---|---|---|
+| **Flujo** | `match_requested(map_id)` / `menu_requested` | GameManager | Main |
+| **Flujo** | `state_changed(new_state, old_state)` | GameManager | HUD |
+| **Partida** | `countdown_tick(segundos)` | MatchController | HUD, AudioManager |
+| **Partida** | `round_started(ronda_num, portador)` | MatchController | HUD, AudioManager |
+| **Partida** | `character_eliminated(personaje)` | MatchController | Core del sistema |
+| **Partida** | `match_ended(player_won)` | GameManager | HUD, AudioManager |
+| **Bomba** | `bomb_time_changed(tiempo_restante, duracion)`| BombManager | AudioManager |
+| **Bomba** | `bomb_transferred(from_player, to_player)` | BombManager | AudioManager, Minimapa |
+| **Bomba** | `bomb_exploded(portador)` | BombManager | MatchController, HUD, AudioManager |
+| **Bomba** | `bomb_time_bonus_requested(segundos)` | EffectManager | BombManager |
+| **Bloques** | `lucky_block_collected(bloque, recompensa)` | LuckyBlockSpawner | HUD, AudioManager |
+| **Efectos** | `effect_applied(tipo, id, duracion)` | EffectManager | AudioManager, HUD |
+| **Efectos** | `effect_expired(tipo, id)` | EffectManager | AudioManager, HUD |
+| **Audio** | `sfx_requested(sound_name)` | Cualquier Módulo | AudioManager |
+
+### 12.2 Restricciones del Sistema de Física (Capas de Colisión)
+El motor de física de Godot se debe parametrizar bajo la siguiente matriz de asignación estricta para evitar colisiones erróneas o traspasos de mapa no deseados:
+- **Capa de Colisión 1 (Mundo):** Paredes, obstáculos estáticos del mapa y límites del escenario.
+- **Capa de Colisión 2 (Personajes):** Cuerpo físico del humano y de los 9 bots (alterable dinámicamente según el rol de portador/no portador para la gestión de pasadizos).
+- **Capa de Colisión 3 (Lucky Blocks):** Entidades interactivas de recompensa esparcidas por el mapa.
+
+### 12.3 Regla de Consistencia de Datos para Modding/Balance
+- **RN-06.7 Consistencia de Pesos:** En cualquier mutación, actualización o adición a la tabla de recompensas de los `Lucky Blocks`, la sumatoria total de las probabilidades (`weight`) de todas las rarezas registradas debe dar **exactamente 100**. El sistema debe contar con una prueba unitaria automatizada que impida la compilación o exportación si esta regla se rompe.
 
 ---
 
