@@ -138,3 +138,22 @@
 - **Cambio realizado:** Se registró el resultado de la revisión estática final.
 - **Verificación:** `git diff --check` pasó; se retiró el directorio temporal de configuración usado para correr Godot. GUT permanece en 46/46 pruebas.
 - **Commit:** Pendiente; no se creó ningún commit.
+
+### AI-009 – Modo 2 jugadores con cámara compartida (P1 / P2)
+- **Fecha/hora:** 2026-10-10 (fecha de la sesión; `[COMPLETAR: hora real al hacer el commit]`)
+- **Participante:** Albert Valencia Escobar (PARTICIPANT_ID: A00407443)
+- **Herramienta IA:** Claude (Anthropic) – Claude Sonnet 5.5, vía interfaz de chat. Asistente oficial de desarrollo del AI GAME JAM.
+- **Tipo:** AI_GENERATED
+- **Solicitud (resumen):** Añadir una opción de menú para dos jugadores. Una sola pantalla (no dividida) cuya cámara enfoca el punto medio entre ambos y se amplía/mueve para que los dos siempre se vean. Jugadores identificados como P1 (WASD + E) y P2 (flechas + Espacio) con pantalla emergente que explique los controles. Si muere uno, desde la ronda siguiente la cámara solo enfoca al vivo; si mueren los dos, fin de juego con las opciones de siempre. Mensajes de victoria "Ganó P1" / "Ganó P2". Quien no tiene la bomba ve los Lucky Blocks y habilidades pero no recibe buffs. Actualizar `docs/SRS.md`, `AI_TRACE.md` y la documentación.
+- **Archivos (creados):** `scripts/camera/dual_camera.gd`, `tests/unit/test_two_players.gd`.
+- **Archivos (modificados):** `project.godot` (10 acciones nuevas `p1_*` / `p2_*`), `scripts/autoload/game_manager.gd`, `scripts/characters/{character,player_character}.gd`, `scripts/match/match_controller.gd`, `scripts/ui/{main_menu,rules_screen,hud}.gd`, `scripts/maps/minimap.gd`, `tests/unit/test_input_map.gd`, `docs/SRS.md` (nuevo RF-11 y ajustes en RF-01, RF-03, RF-08, RF-09a y reglas globales), `README.md`, `AI_TRACE.md`.
+- **Cambio realizado:**
+  - Menú: botón "2 Jugadores" ("Jugar" sigue siendo 1 jugador). Ambos pasan por la pantalla de reglas; en 2 jugadores esa pantalla emergente lista los controles de P1 y P2.
+  - `PlayerCharacter.player_index` (0/1/2) elige las acciones del Input Map; nuevo método virtual `Character.wants_shortcut()` sustituye la comprobación fija de la tecla de atajo.
+  - `DualCamera`: se centra en el punto medio de los jugadores enfocados y calcula el zoom para que quepan con margen; suavizado dependiente de `delta`; respeta límites del mapa. `MatchController` le cambia los objetivos al empezar cada ronda, de modo que el jugador muerto sale del foco en la ronda siguiente.
+  - Fin de partida: derrota si no queda ningún humano; victoria si no quedan bots y queda un solo humano (se guarda `GameManager.winner_label`). La firma de `match_ended(player_won)` no cambió.
+  - HUD: mensajes "¡GANÓ P1!" / "¡GANÓ P2!", efectos con prefijo de jugador, recordatorio de teclas y minimapa Radar para cualquiera de los dos humanos con bomba.
+  - Lucky Blocks y efectos no se modificaron: ya solo los recoge/recibe quien lleva la bomba y se ven mientras cualquier humano la lleva.
+- **Verificación:** **No se pudo ejecutar** Godot/GUT en el entorno de la IA (no hay ejecutable). Solo se revisó el código de forma estática. Se agregaron pruebas GUT (`test_two_players.gd` y casos en `test_input_map.gd`) que **el equipo debe ejecutar**. Pasos manuales: abrir el proyecto, "2 Jugadores", comprobar controles, alejar/juntar a P1 y P2, dejar morir a uno y ver la cámara en la ronda siguiente, y comprobar los mensajes finales.
+- **Notas / supuestos:** (1) Los bots se mantienen en el modo 2 jugadores. (2) Si no quedan bots y siguen vivos P1 y P2, las rondas continúan hasta que quede uno (decisión asumida; confirmar con el equipo). (3) La IA no tiene acceso al repositorio: no hizo commits; el equipo debe revisar el diff y hacer el commit. (4) Riesgo conocido: algunos teclados no registran todas las combinaciones cuando dos personas pulsan muchas teclas a la vez.
+- **Commit:** `feat: add two-player mode with shared auto-zoom camera` *(sugerido; completar con el hash real al hacer el commit)*

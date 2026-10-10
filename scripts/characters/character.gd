@@ -17,6 +17,8 @@ const SpriteScript := preload("res://scripts/characters/character_sprite.gd")
 @export var display_name := "Personaje"
 @export var base_speed := 230.0
 @export var body_color := Color(0.35, 0.65, 1.0)
+## Color del nombre bajo el personaje (los jugadores P1/P2 lo usan para distinguirse).
+var name_color := Color.WHITE
 
 var has_bomb := false:
 	set(value):
@@ -77,7 +79,7 @@ func _physics_process(_delta: float) -> void:
 		return
 	if not has_bomb and game_map != null:
 		var use_automatically := can_auto_use_shortcut()
-		if use_automatically or (self is PlayerCharacter and Input.is_action_just_pressed("shortcut")):
+		if use_automatically or wants_shortcut():
 			if game_map.try_use_shortcut(self):
 				return
 	velocity = get_input_direction().limit_length(1.0) * get_current_speed()
@@ -93,6 +95,12 @@ func _process(_delta: float) -> void:
 
 func flash_transfer() -> void:
 	_transfer_flash_left = 0.9
+
+
+## Indica si el personaje pide usar un atajo en este frame. PlayerCharacter lo
+## sobrescribe con la tecla de atajo que le corresponde (E / Espacio / E de P1 / Espacio de P2).
+func wants_shortcut() -> bool:
+	return false
 
 
 ## Dirección deseada de movimiento. La sobrescriben PlayerCharacter y BotCharacter.
@@ -142,5 +150,5 @@ func _draw() -> void:
 		HORIZONTAL_ALIGNMENT_CENTER,
 		100.0,
 		13,
-		Color.WHITE
+		name_color
 	)

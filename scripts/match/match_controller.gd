@@ -9,6 +9,13 @@ extends Node2D
 ##           * si no quedan bots:  VICTORIA
 ##           * si no: ROUND_END (pausa breve) -> nueva COUNTDOWN
 ##
+## Modo 2 jugadores (GameManager.two_players): P1 y P2 juegan con la misma cámara.
+##   * Si muere un jugador, la partida sigue y la cámara solo enfoca al que sigue vivo
+##     (el cambio se aplica al empezar la siguiente ronda).
+##   * Si mueren los dos: DERROTA (fin de partida como siempre).
+##   * Si no quedan bots y solo queda un jugador vivo: gana ese jugador ("Ganó P1" / "Ganó P2").
+##     Si quedan los dos jugadores sin bots, se sigue jugando hasta que quede uno.
+##
 ## Se destruye y recrea al reiniciar la partida (ver main.gd).
 
 enum Phase { COUNTDOWN, ROUND, ROUND_END, DONE }
@@ -28,7 +35,11 @@ const BOT_COLORS := [
 @export var bomb_duration := 60.0
 
 var map: GameMap
+## En 1 jugador es el único jugador; en 2 jugadores es P1 (compatibilidad).
 var player: PlayerCharacter
+## Jugadores humanos: [player] en 1 jugador, [P1, P2] en 2 jugadores.
+var players: Array[PlayerCharacter] = []
+var camera: Camera2D
 var characters: Array[Character] = []
 var bomb: BombManager
 var effects: EffectManager
@@ -93,11 +104,17 @@ func _build_map() -> void:
 
 func _build_characters() -> void:
 	var spawns := map.get_spawn_points()
-	player = PlayerCharacter.new()
-	player.game_map = map
-	add_child(player)
-	characters.append(player)
-	var bot_total := clampi(GameManager.bot_count, GameManager.MIN_BOTS, spawns.size() - 1)
+	var human_total := 2 if GameManager.two_players else 1
+	for i in human_total:
+		var human := PlayerCharacter.new()
+		if GameManager.two_players:
+			human.player_index = i + 1
+		human.game_map = map
+		add_child(human)
+		characters.append(human)
+		players.append(human)
+	player = players[0]
+	var bot_total := clampi(GameManager.bot_count, GameManager.MIN_BOTS, spawns.size() - human_total)
 	for i in bot_total:
 		var bot := BotCharacter.new()
 		bot.display_name = BOT_NAMES[i % BOT_NAMES.size()]
@@ -124,20 +141,56 @@ func _build_systems() -> void:
 
 
 func _build_camera() -> void:
-	var camera := Camera2D.new()
+	if GameManager.two_players:
+		_build_dual_camera()
+		return
+	var follow := Camera2D.new()
 	var bounds := map.get_bounds()
-	camera.limit_left = int(bounds.position.x)
-	camera.limit_top = int(bounds.position.y)
-	camera.limit_right = int(bounds.end.x)
-	camera.limit_bottom = int(bounds.end.y)
-	camera.position_smoothing_enabled = true
-	player.add_child(camera)
+	follow.limit_left = int(bounds.position.x)
+	follow.limit_top = int(bounds.position.y)
+	follow.limit_right = int(bounds.end.x)
+	follow.limit_bottom = int(bounds.end.y)
+	follow.position_smoothing_enabled = true
+	player.add_child(follow)
+	camera = follow
+
+
+## Cámara compartida: enfoca el punto medio de los jugadores y ajusta el zoom (ver DualCamera).
+func _build_dual_camera() -> void:
+	var dual := DualCamera.new()
+	add_child(dual)
+	dual.set_bounds(map.get_bounds())
+	camera = dual
+	_update_camera_targets()
+	dual.global_position = _midpoint_of(dual.get_targets())
+	dual.reset_smoothing()
+
+
+## La cámara pasa a enfocar solo a los jugadores que siguen vivos.
+func _update_camera_targets() -> void:
+	var dual := camera as DualCamera
+	if dual == null:
+		return
+	var targets: Array[Node2D] = []
+	for human in players:
+		if not human.is_eliminated:
+			targets.append(human)
+	dual.set_targets(targets)
+
+
+func _midpoint_of(nodes: Array[Node2D]) -> Vector2:
+	if nodes.is_empty():
+		return Vector2.ZERO
+	var sum := Vector2.ZERO
+	for node in nodes:
+		sum += node.global_position
+	return sum / nodes.size()
 
 
 func _build_hud() -> void:
 	hud = Hud.new()
 	add_child(hud)
-	hud.setup(player, effects, bomb, map, get_alive_characters)
+	hud.setup(player, effects, bomb, map, get_alive_characters, players)
 
 
 # --- Rondas -------------------------------------------------------------------
@@ -159,6 +212,7 @@ func _begin_countdown() -> void:
 	_last_tick = -1
 	effects.clear_all()
 	_reset_positions()
+	_update_camera_targets()
 	GameManager.set_state(GameManager.State.COUNTDOWN)
 
 
@@ -188,10 +242,11 @@ func _on_bomb_exploded(holder_node: Node) -> void:
 	add_child(fx)
 	GameEvents.character_eliminated.emit(holder)
 
-	if holder == player:
+	var humans_alive := _alive_human_count()
+	if humans_alive == 0:
 		_finish(false)
-	elif _alive_bot_count() == 0:
-		_finish(true)
+	elif _alive_bot_count() == 0 and humans_alive == 1:
+		_finish(true, _last_human_alive())
 	else:
 		GameManager.set_state(GameManager.State.ROUND_END)
 		_phase_time = round_end_delay
@@ -205,8 +260,25 @@ func _alive_bot_count() -> int:
 	return count
 
 
-func _finish(player_won: bool) -> void:
+func _alive_human_count() -> int:
+	var count := 0
+	for human in players:
+		if not human.is_eliminated:
+			count += 1
+	return count
+
+
+func _last_human_alive() -> PlayerCharacter:
+	for human in players:
+		if not human.is_eliminated:
+			return human
+	return null
+
+
+## `winner` solo se usa en 2 jugadores: su etiqueta ("P1"/"P2") se muestra en el mensaje de victoria.
+func _finish(player_won: bool, winner: PlayerCharacter = null) -> void:
 	phase = Phase.DONE
 	bomb.stop()
 	effects.clear_all()
-	GameManager.end_match(player_won)
+	var label := winner.display_name if (winner != null and GameManager.two_players) else ""
+	GameManager.end_match(player_won, label)

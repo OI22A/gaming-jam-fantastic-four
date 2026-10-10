@@ -1,0 +1,1157 @@
+diff --git a/AI_TRACE.md b/AI_TRACE.md
+index d71cf18..2b7b807 100644
+--- a/AI_TRACE.md
++++ b/AI_TRACE.md
+@@ -138,3 +138,22 @@
+ - **Cambio realizado:** Se registró el resultado de la revisión estática final.
+ - **Verificación:** `git diff --check` pasó; se retiró el directorio temporal de configuración usado para correr Godot. GUT permanece en 46/46 pruebas.
+ - **Commit:** Pendiente; no se creó ningún commit.
++
++### AI-009 – Modo 2 jugadores con cámara compartida (P1 / P2)
++- **Fecha/hora:** 2026-10-10 (fecha de la sesión; `[COMPLETAR: hora real al hacer el commit]`)
++- **Participante:** Albert Valencia Escobar (PARTICIPANT_ID: A00407443)
++- **Herramienta IA:** Claude (Anthropic) – Claude Sonnet 5.5, vía interfaz de chat. Asistente oficial de desarrollo del AI GAME JAM.
++- **Tipo:** AI_GENERATED
++- **Solicitud (resumen):** Añadir una opción de menú para dos jugadores. Una sola pantalla (no dividida) cuya cámara enfoca el punto medio entre ambos y se amplía/mueve para que los dos siempre se vean. Jugadores identificados como P1 (WASD + E) y P2 (flechas + Espacio) con pantalla emergente que explique los controles. Si muere uno, desde la ronda siguiente la cámara solo enfoca al vivo; si mueren los dos, fin de juego con las opciones de siempre. Mensajes de victoria "Ganó P1" / "Ganó P2". Quien no tiene la bomba ve los Lucky Blocks y habilidades pero no recibe buffs. Actualizar `docs/SRS.md`, `AI_TRACE.md` y la documentación.
++- **Archivos (creados):** `scripts/camera/dual_camera.gd`, `tests/unit/test_two_players.gd`.
++- **Archivos (modificados):** `project.godot` (10 acciones nuevas `p1_*` / `p2_*`), `scripts/autoload/game_manager.gd`, `scripts/characters/{character,player_character}.gd`, `scripts/match/match_controller.gd`, `scripts/ui/{main_menu,rules_screen,hud}.gd`, `scripts/maps/minimap.gd`, `tests/unit/test_input_map.gd`, `docs/SRS.md` (nuevo RF-11 y ajustes en RF-01, RF-03, RF-08, RF-09a y reglas globales), `README.md`, `AI_TRACE.md`.
++- **Cambio realizado:**
++  - Menú: botón "2 Jugadores" ("Jugar" sigue siendo 1 jugador). Ambos pasan por la pantalla de reglas; en 2 jugadores esa pantalla emergente lista los controles de P1 y P2.
++  - `PlayerCharacter.player_index` (0/1/2) elige las acciones del Input Map; nuevo método virtual `Character.wants_shortcut()` sustituye la comprobación fija de la tecla de atajo.
++  - `DualCamera`: se centra en el punto medio de los jugadores enfocados y calcula el zoom para que quepan con margen; suavizado dependiente de `delta`; respeta límites del mapa. `MatchController` le cambia los objetivos al empezar cada ronda, de modo que el jugador muerto sale del foco en la ronda siguiente.
++  - Fin de partida: derrota si no queda ningún humano; victoria si no quedan bots y queda un solo humano (se guarda `GameManager.winner_label`). La firma de `match_ended(player_won)` no cambió.
++  - HUD: mensajes "¡GANÓ P1!" / "¡GANÓ P2!", efectos con prefijo de jugador, recordatorio de teclas y minimapa Radar para cualquiera de los dos humanos con bomba.
++  - Lucky Blocks y efectos no se modificaron: ya solo los recoge/recibe quien lleva la bomba y se ven mientras cualquier humano la lleva.
++- **Verificación:** **No se pudo ejecutar** Godot/GUT en el entorno de la IA (no hay ejecutable). Solo se revisó el código de forma estática. Se agregaron pruebas GUT (`test_two_players.gd` y casos en `test_input_map.gd`) que **el equipo debe ejecutar**. Pasos manuales: abrir el proyecto, "2 Jugadores", comprobar controles, alejar/juntar a P1 y P2, dejar morir a uno y ver la cámara en la ronda siguiente, y comprobar los mensajes finales.
++- **Notas / supuestos:** (1) Los bots se mantienen en el modo 2 jugadores. (2) Si no quedan bots y siguen vivos P1 y P2, las rondas continúan hasta que quede uno (decisión asumida; confirmar con el equipo). (3) La IA no tiene acceso al repositorio: no hizo commits; el equipo debe revisar el diff y hacer el commit. (4) Riesgo conocido: algunos teclados no registran todas las combinaciones cuando dos personas pulsan muchas teclas a la vez.
++- **Commit:** `feat: add two-player mode with shared auto-zoom camera` *(sugerido; completar con el hash real al hacer el commit)*
+diff --git a/README.md b/README.md
+index c170577..54b7648 100644
+--- a/README.md
++++ b/README.md
+@@ -1,6 +1,6 @@
+ # Papa Caliente 2D
+ 
+-Videojuego 2D inspirado en la "papa caliente": un jugador humano compite contra bots por no quedarse con la bomba
++Videojuego 2D inspirado en la "papa caliente": un jugador humano (o **dos, en el mismo teclado**) compite contra bots por no quedarse con la bomba
+ cuando se acaba el temporizador. En el parque (ambientación de ciudad) aparecen **Lucky Blocks** que dan efectos
+ aleatorios —de distinta rareza— a quien lleva la bomba.
+ 
+@@ -151,7 +151,8 @@ inferior **GUT** → *Run All*.
+ | Pausar / reanudar | `Esc` (o `P`) |
+ | Reiniciar la partida | `R` |
+ 
+-1. Elige el mapa y el número de bots en el menú.
++1. Elige el número de bots en el menú y pulsa **Jugar** (1 jugador) o **2 Jugadores**.
++   Antes de empezar se muestra una pantalla con las reglas y los controles.
+ 2. Tras la cuenta regresiva, un personaje al azar recibe la bomba. **Tócalo a otro para pasársela**
+    (hay un breve enfriamiento tras cada transferencia).
+ 3. Quien tiene la bomba puede recoger **Lucky Blocks** (cuadros amarillos con `?`): dan efectos de distinta rareza
+@@ -183,6 +184,20 @@ Notas importantes:
+ - Para publicar (itch.io, GitHub Pages…) sube el **contenido** de `build/web/` (con `index.html` en la raíz).
+ - La carpeta `build/` no se versiona; se regenera cuando haga falta.
+ 
++### Modo 2 jugadores
++
++Misma pantalla, sin dividirla: la cámara se centra entre P1 y P2 y se aleja o acerca para que ambos se vean siempre.
++
++| Jugador | Mover | Atajo |
++|---|---|---|
++| **P1** (azul) | `W A S D` | `E` |
++| **P2** (turquesa) | Flechas | `Espacio` |
++
++- Si un jugador muere, el otro sigue y, desde la ronda siguiente, la cámara solo lo enfoca a él. Si mueren los dos, es derrota.
++- Gana el último jugador en pie: se muestra "¡GANÓ P1!" o "¡GANÓ P2!", con las opciones de siempre (jugar de nuevo / menú).
++- Solo quien tiene la bomba recibe los efectos de los Lucky Blocks, pero ambos ven los bloques y las habilidades activas.
++- Detalle completo en `docs/SRS.md` (RF-11).
++
+ ---
+ 
+ ## 5. Estructura del proyecto
+@@ -197,7 +212,8 @@ Notas importantes:
+ ├── scripts/
+ │   ├── autoload/            GameEvents (bus), GameManager (estados), AudioManager
+ │   ├── match/               MatchController: rondas, eliminación, cámara, HUD
+-│   ├── characters/          Character (base) y PlayerCharacter
++│   ├── camera/              DualCamera (cámara compartida del modo 2 jugadores)
++│   ├── characters/          Character (base) y PlayerCharacter (1 jugador, P1 o P2)
+ │   ├── ai/                  BotCharacter (IA)
+ │   ├── bomb/                BombManager (temporizador y transferencia)
+ │   ├── lucky_blocks/        LuckyBlock, spawner y RewardTable (rarezas y probabilidades)
+@@ -216,6 +232,7 @@ Notas importantes:
+ | Gestión de partidas | `autoload/game_manager.gd`, `match/match_controller.gd` | RF-01 |
+ | Mapas y minimapa | `maps/*` | RF-02, RF-08 |
+ | Control de jugadores | `characters/*` | RF-03 |
++| Modo 2 jugadores y cámara compartida | `camera/dual_camera.gd`, `match/match_controller.gd`, `ui/*` | RF-11 |
+ | Inteligencia artificial | `ai/bot_character.gd` | RF-04 |
+ | Gestión de la bomba | `bomb/bomb_manager.gd` | RF-05 |
+ | Lucky Blocks | `lucky_blocks/*` | RF-06 |
+diff --git a/docs/SRS.md b/docs/SRS.md
+index 06b02f2..6c05746 100644
+--- a/docs/SRS.md
++++ b/docs/SRS.md
+@@ -39,7 +39,8 @@ Los valores marcados **[param]** son valores de partida ajustables, no decisione
+ - El número de bots se conserva ajustable desde el menú (1–5 bots; un humano, valor inicial 3 bots).
+ - **Portador humano:** puede recoger Lucky Blocks. El minimapa, en la esquina superior derecha, solo aparece durante Radar y entonces muestra todos los personajes vivos. No puede usar atajos.
+ - **No portador:** no recoge Lucky Blocks y puede usar los atajos. Los bots pueden recoger bloques cuando llevan la bomba.
+-- No existe modo fantasma: si el humano muere, se muestran los resultados y no observa rondas posteriores.
++- No existe modo fantasma: si el humano muere, se muestran los resultados y no observa rondas posteriores. *(En el modo 2 jugadores esto aplica cuando mueren ambos humanos; ver RF-11.)*
++- **Modos de juego:** 1 jugador (por defecto) y 2 jugadores locales en un mismo teclado (RF-11). El menú ofrece un botón para cada modo; el número de bots es común a ambos.
+ 
+ ## Orden de implementación
+ 
+@@ -48,6 +49,7 @@ Los valores marcados **[param]** son valores de partida ajustables, no decisione
+ 10. Audio · Pulido (**Fase 3**)
+ 
+ RF-10 (web) es transversal: se exporta y prueba desde la Fase 1.
++RF-11 (modo 2 jugadores) se construye sobre las Fases 1 y 2 ya existentes y no cambia el modo de 1 jugador.
+ 
+ ---
+ 
+@@ -63,7 +65,7 @@ Base compartida (`CharacterBody2D`) para el humano y el número de bots configur
+   - Izquierda: `A` y `←`
+   - Derecha: `D` y `→`
+   - Las letras se asignan por **tecla física** (physical keycode) para que WASD funcione igual en teclados no QWERTY.
+-- **RF-03.1.2 Equivalencia.** WASD y las flechas son equivalentes y se pueden usar de forma indistinta o combinada.
++- **RF-03.1.2 Equivalencia.** En el modo de 1 jugador, WASD y las flechas son equivalentes y se pueden usar de forma indistinta o combinada. En el modo de 2 jugadores **dejan de ser equivalentes** y se reparten entre P1 y P2 (RF-11.2).
+ - **RF-03.1.3 Dirección en 8 sentidos.** La dirección se obtiene con `Input.get_vector("move_left", "move_right", "move_up", "move_down")`, que devuelve un vector **normalizado**. La velocidad diagonal es igual a la ortogonal.
+ - **RF-03.1.4 Teclas opuestas.** Si se pulsan dos teclas opuestas (A+D o W+S), se cancelan y el jugador no se mueve en ese eje.
+ - **RF-03.1.5 Velocidad.** `velocity = direccion * VELOCIDAD_BASE * multiplicador_velocidad`, aplicada con `move_and_slide()` dentro de `_physics_process`. Vista cenital (top-down), sin gravedad.
+@@ -80,8 +82,9 @@ Base compartida (`CharacterBody2D`) para el humano y el número de bots configur
+ - **RF-03.2** Humano y bots usan la misma escena y velocidad base (230 px/s). Solo cambia la fuente de dirección (teclado o IA).
+ - **RF-03.3** Los jugadores colisionan con los obstáculos del mapa y no los atraviesan.
+ - **RF-03.4** Al escuchar `bomb_transferred`, se actualiza el rol y la capacidad de usar atajos. El portador no puede activarlos.
+-- **RF-03.5** El humano no portador debe pulsar E o Espacio al estar junto a la entrada marcada; estar encima no activa el atajo. Los bots conservan su activación automática al alcanzar esa entrada. Cada atajo es una zona cerrada, con una única entrada y una salida de sentido único. Solo la animación controlada de 3.2 s atraviesa la zona: no hay movimiento libre dentro de ella. Ningún personaje puede entrar caminando; el portador choca con el perímetro y no puede activar el acceso. El atajo queda bloqueado durante todo el cruce y el personaje no puede recibir ni transferir la bomba hasta salir. La salida no permite volver a entrar. Sonido del atajo: ver RF-09b.8.
+-- **RF-03.6** Al ser eliminado, el humano termina la partida inmediatamente; no existe modo fantasma.
++- **RF-03.5** El humano no portador debe pulsar su tecla de atajo (E o Espacio en 1 jugador; E para P1 y Espacio para P2 en 2 jugadores) al estar junto a la entrada marcada; estar encima no activa el atajo. Los bots conservan su activación automática al alcanzar esa entrada. Cada atajo es una zona cerrada, con una única entrada y una salida de sentido único. Solo la animación controlada de 3.2 s atraviesa la zona: no hay movimiento libre dentro de ella. Ningún personaje puede entrar caminando; el portador choca con el perímetro y no puede activar el acceso. El atajo queda bloqueado durante todo el cruce y el personaje no puede recibir ni transferir la bomba hasta salir. La salida no permite volver a entrar. Sonido del atajo: ver RF-09b.8.
++- **RF-03.6** Al ser eliminado, el humano termina la partida inmediatamente; no existe modo fantasma. *(En 2 jugadores la partida solo termina cuando mueren los dos; ver RF-11.5.)*
++- **RF-03.8** `PlayerCharacter` tiene un `player_index` (0 = jugador único, 1 = P1, 2 = P2) que decide qué acciones del Input Map lee (`move_*`/`shortcut`, `p1_*` o `p2_*`). La petición de atajo se expone con el método virtual `Character.wants_shortcut()` (los bots no lo usan: entran solos).
+ - **RF-03.7** La velocidad es modificable por el sistema de efectos mediante multiplicadores positivos, sin tocar `VELOCIDAD_BASE`.
+ 
+ **Aceptación**
+@@ -128,10 +131,11 @@ Base compartida (`CharacterBody2D`) para el humano y el número de bots configur
+ ## 4. RF-01 Gestión de partidas
+ 
+ - **RF-01.1** Estados: `MENÚ → JUGANDO → TERMINADA`. La partida se inicia desde el menú.
+-- **RF-01.2** Al iniciar: carga el mapa seleccionado, instancia 1 humano + 1–10 bots (inicial 3), asigna puntos de aparición y arranca la bomba.
++- **RF-01.2** Al iniciar: carga el mapa seleccionado, instancia 1 humano (2 en modo 2 jugadores) + 1–10 bots (inicial 3; en 2 jugadores el máximo efectivo es 10 porque el mapa tiene 12 puntos de aparición), asigna puntos de aparición y arranca la bomba.
+ - **RF-01.3** Al recibir `character_eliminated`, se marca al jugador fuera. Si es el humano, la partida termina y se muestran resultados.
+-- **RF-01.4** La partida termina al morir el humano o cuando no quedan bots vivos; emite `match_ended(player_won)`.
++- **RF-01.4** La partida termina al morir el humano o cuando no quedan bots vivos; emite `match_ended(player_won)`. *(En 2 jugadores: ver RF-11.5.)*
+ - **RF-01.5** Victoria si el ganador es el humano. Derrota y fin inmediato si fue eliminado.
++- **RF-01.8** `GameManager` guarda el modo elegido (`two_players`) y, al terminar, quién ganó (`winner_label`: `"P1"`, `"P2"` o vacío). La señal `match_ended(player_won)` **no cambia** de firma. Reiniciar (`R` o "Jugar de nuevo") conserva el modo.
+ - **RF-01.6** Reiniciar limpia efectos, bloques y jugadores, y comienza una partida nueva.
+ - **RF-01.7 Máquina de Estados Global (`GameManager.State`):** El sistema debe regirse estrictamente por una máquina de estados centralizada que controle el flujo del juego, ignorando inputs no correspondientes al estado activo:
+   - `MENU`: Estado inicial. Transiciona a `COUNTDOWN` mediante la señal `match_requested`.
+@@ -168,6 +172,8 @@ Base compartida (`CharacterBody2D`) para el humano y el número de bots configur
+ - **RF-09a.4** Indicador de efectos activos y su tiempo restante.
+ - **RF-09a.5** Pantalla de resultados: victoria o derrota, con opciones de reiniciar y volver al menú.
+ - **RF-09a.6** Al morir el humano, se muestra derrota sin modo fantasma.
++- **RF-09a.7** El menú principal tiene el botón **"Jugar"** (1 jugador) y el botón **"2 Jugadores"**. Ambos abren primero la pantalla de reglas; en 2 jugadores esa pantalla emergente explica los controles (RF-11.3).
++- **RF-09a.8** Indicador de efectos activos: en 2 jugadores cada línea lleva el prefijo del jugador (`P1:` / `P2:`). En 2 jugadores se muestra además, abajo, un recordatorio de teclas de P1 y P2.
+ 
+ **Aceptación:** el HUD refleja el estado actual en todo momento.
+ 
+@@ -217,7 +223,7 @@ Base compartida (`CharacterBody2D`) para el humano y el número de bots configur
+ ## 9. RF-08 Minimapa
+ 
+ - **RF-08.1** El minimapa se ubica arriba a la derecha, en una capa visible sobre el HUD, y permanece oculto excepto mientras el humano que lleva la bomba tenga activo el efecto Radar.
+-- **RF-08.2** Durante Radar muestra el mapa de referencia y la posición de todos los personajes vivos; el humano se distingue visualmente.
++- **RF-08.2** Durante Radar muestra el mapa de referencia y la posición de todos los personajes vivos; el humano se distingue visualmente. En 2 jugadores el minimapa aparece si **cualquiera** de los dos humanos lleva la bomba y tiene Radar, y P1/P2 se dibujan con su propio color.
+ - **RF-08.3** Al vencer Radar o transferirse la bomba, el minimapa se oculta inmediatamente. Los Lucky Blocks no se dibujan en él.
+ - **RF-08.4** El rastreo y el minimapa duran `DURACION_EFECTO` (10 s).
+ 
+@@ -282,6 +288,7 @@ Para garantizar el desacoplamiento total de los módulos, el software debe imple
+ | **Partida** | `round_started(ronda_num, portador)` | MatchController | HUD, AudioManager |
+ | **Partida** | `character_eliminated(personaje)` | MatchController | Core del sistema |
+ | **Partida** | `match_ended(player_won)` | GameManager | HUD, AudioManager |
++| *(sin señal nueva)* | El ganador de 2 jugadores se lee de `GameManager.winner_label` al recibir `match_ended`. | GameManager | HUD |
+ | **Bomba** | `bomb_time_changed(tiempo_restante, duracion)`| BombManager | AudioManager |
+ | **Bomba** | `bomb_transferred(from_player, to_player)` | BombManager | AudioManager, Minimapa |
+ | **Bomba** | `bomb_exploded(portador)` | BombManager | MatchController, HUD, AudioManager |
+@@ -304,9 +311,47 @@ El motor de física de Godot se debe parametrizar bajo la siguiente matriz de as
+ 
+ ---
+ 
++## 13. RF-11 Modo 2 jugadores
++
++Modo local para dos personas en el mismo teclado y **la misma pantalla** (no hay pantalla dividida). Los bots siguen presentes (mismo ajuste de menú).
++
++- **RF-11.1 Acceso.** El menú principal incluye el botón "2 Jugadores". Al pulsarlo se muestra la pantalla de reglas en versión 2 jugadores y, al confirmar con "¡Entendido!", empieza la partida con `GameManager.two_players = true`. "Jugar" sigue iniciando el modo de 1 jugador.
++- **RF-11.2 Jugadores y controles.** Aparecen dos humanos identificados como **P1** (azul) y **P2** (turquesa); el nombre bajo cada personaje y los mensajes usan esas etiquetas. Cada uno tiene sus propias acciones del Input Map, definidas por tecla física:
++
++| Jugador | Mover | Atajo | Acciones |
++|---|---|---|---|
++| P1 | `W` `A` `S` `D` | `E` | `p1_up/down/left/right`, `p1_shortcut` |
++| P2 | `↑` `←` `↓` `→` | `Espacio` | `p2_up/down/left/right`, `p2_shortcut` |
++
++  Las acciones del modo 1 jugador (`move_*`, `shortcut`) se conservan sin cambios.
++- **RF-11.3 Pantalla emergente de controles.** Antes de empezar, la pantalla de reglas (título "CÓMO SE JUEGA · 2 JUGADORES") indica: P1 se mueve con W A S D y usa los atajos con E; P2 se mueve con las flechas y usa los atajos con Espacio. También explica la cámara compartida y la condición de victoria. "Volver" o `Esc` cancelan sin iniciar la partida.
++- **RF-11.4 Cámara compartida (`DualCamera`).** Una única cámara se centra en el **punto medio** de los jugadores enfocados y ajusta el zoom para que todos aparezcan siempre (con un margen de 220 px **[param]**): si se separan se aleja, si se juntan se acerca hasta el zoom normal (1.0). El zoom mínimo es el que muestra el mapa completo, y la cámara respeta los límites del mapa. El suavizado de posición y de zoom depende de `delta`, no de frames.
++- **RF-11.5 Muerte y fin de partida.**
++  - Si un jugador muere y el otro sigue vivo, la partida continúa. La cámara pasa a enfocar **solo al jugador vivo a partir de la siguiente ronda** (durante el `ROUND_END` aún se ve la explosión).
++  - Si mueren los dos, la partida termina como siempre (`ENDED`, derrota) con las mismas opciones: jugar de nuevo y menú.
++  - **Victoria:** cuando no quedan bots y queda un solo jugador vivo, gana ese jugador. Si no quedan bots pero siguen vivos los dos, las rondas continúan hasta que quede uno **[asumido]**.
++- **RF-11.6 Mensajes de resultado.** Victoria: "¡GANÓ P1!" o "¡GANÓ P2!" según el jugador que queda vivo, con las mismas opciones de siempre ("Jugar de nuevo (R)" y "Menú"). Derrota (mueren ambos): "¡DERROTA!" con el número de ronda. En 1 jugador los textos "¡VICTORIA!" / "¡DERROTA!" no cambian.
++- **RF-11.7 Bomba, Lucky Blocks y habilidades.** Las reglas de RF-05, RF-06 y RF-07 no cambian: solo quien lleva la bomba recoge Lucky Blocks y solo a él se le aplican los efectos. Mientras **cualquiera** de los dos humanos lleve la bomba, los Lucky Blocks se ven en el mapa y las habilidades activas se listan en pantalla para ambos (con prefijo `P1:`/`P2:`); el jugador sin bomba puede verlos pero **no recibe ningún buff**. Los efectos que marcan a los rivales (Radar) pueden marcar también al otro jugador.
++- **RF-11.8 Pausa y reinicio.** `Esc`/`P` y `R` funcionan igual en ambos modos; `R` reinicia en el mismo modo.
++
++**Aceptación**
++- Desde el menú se puede iniciar 1 jugador o 2 jugadores, y en 2 jugadores se ve la pantalla de controles de P1 y P2 antes de empezar.
++- P1 solo responde a W A S D / E; P2 solo a las flechas / Espacio.
++- Al separar o juntar a los jugadores, la cámara se aleja o acerca y ambos permanecen visibles; no hay pantalla dividida.
++- Tras morir un jugador, en la ronda siguiente la cámara sigue únicamente al superviviente.
++- Si mueren ambos: derrota con "Jugar de nuevo" y "Menú". Si queda uno sin bots: "¡GANÓ P1!" o "¡GANÓ P2!".
++- El jugador sin bomba nunca recibe un buff de un Lucky Block.
++- El modo de 1 jugador funciona exactamente como antes.
++
++Pruebas automatizadas: `tests/unit/test_two_players.gd` y los casos nuevos de `tests/unit/test_input_map.gd`.
++
++---
++
+ ## Pendiente
+ 
+ - Pruebas funcionales de la exportación Web en un navegador Chrome real y publicación.
++- Probar el modo 2 jugadores en una ventana real de Godot (la cámara y las pruebas GUT nuevas no se pudieron ejecutar al escribirlas) y en el navegador, incluido el ghosting de teclado cuando dos personas pulsan muchas teclas a la vez en un mismo teclado.
++- Confirmar con el equipo las decisiones marcadas **[asumido]** de RF-11 (p. ej., el desempate entre P1 y P2 cuando no quedan bots).
+ - Balanceo de velocidad, bomba, probabilidades e IA con el equipo.
+ - Reglamento de la jam (por ahora solo se entrega en GitHub).
+ 
+diff --git a/project.godot b/project.godot
+index 007bca5..9e2b8b8 100644
+--- a/project.godot
++++ b/project.godot
+@@ -79,6 +79,46 @@ shortcut={
+ , Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":32,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
+ ]
+ }
++p1_up={
++"deadzone": 0.5,
++"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":87,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)]
++}
++p1_down={
++"deadzone": 0.5,
++"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":83,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)]
++}
++p1_left={
++"deadzone": 0.5,
++"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":65,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)]
++}
++p1_right={
++"deadzone": 0.5,
++"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":68,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)]
++}
++p1_shortcut={
++"deadzone": 0.5,
++"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":69,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)]
++}
++p2_up={
++"deadzone": 0.5,
++"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":4194320,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)]
++}
++p2_down={
++"deadzone": 0.5,
++"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":4194322,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)]
++}
++p2_left={
++"deadzone": 0.5,
++"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":4194319,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)]
++}
++p2_right={
++"deadzone": 0.5,
++"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":4194321,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)]
++}
++p2_shortcut={
++"deadzone": 0.5,
++"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":32,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)]
++}
+ 
+ [rendering]
+ 
+diff --git a/scripts/autoload/game_manager.gd b/scripts/autoload/game_manager.gd
+index f70ae4c..897840d 100644
+--- a/scripts/autoload/game_manager.gd
++++ b/scripts/autoload/game_manager.gd
+@@ -25,6 +25,10 @@ var current_map_id := DEFAULT_MAP_ID
+ var round_number := 0
+ var player_won := false
+ var bot_count := 3
++## Modo de juego elegido en el menú: false = 1 jugador, true = 2 jugadores (P1 y P2).
++var two_players := false
++## En modo 2 jugadores: "P1" o "P2" si ganó uno de ellos; "" si no hay ganador humano.
++var winner_label := ""
+ 
+ var _state_before_pause: State = State.MENU
+ 
+@@ -58,6 +62,7 @@ func start_match(map_id: String = "") -> void:
+ 		current_map_id = map_id
+ 	round_number = 0
+ 	player_won = false
++	winner_label = ""
+ 	get_tree().paused = false
+ 	set_state(State.COUNTDOWN)
+ 	GameEvents.match_requested.emit(current_map_id)
+@@ -67,8 +72,10 @@ func restart_match() -> void:
+ 	start_match(current_map_id)
+ 
+ 
+-func end_match(won: bool) -> void:
++## `winner` es la etiqueta del jugador ganador en modo 2 jugadores ("P1" / "P2").
++func end_match(won: bool, winner: String = "") -> void:
+ 	player_won = won
++	winner_label = winner if won else ""
+ 	set_state(State.ENDED)
+ 	GameEvents.match_ended.emit(won)
+ 
+@@ -95,3 +102,5 @@ func reset() -> void:
+ 	state = State.MENU
+ 	round_number = 0
+ 	player_won = false
++	winner_label = ""
++	two_players = false
+diff --git a/scripts/camera/dual_camera.gd b/scripts/camera/dual_camera.gd
+new file mode 100644
+index 0000000..b24b3c2
+--- /dev/null
++++ b/scripts/camera/dual_camera.gd
+@@ -0,0 +1,63 @@
++class_name DualCamera
++extends Camera2D
++## Cámara única del modo 2 jugadores (NO divide la pantalla).
++##
++## Se coloca en el punto medio de los jugadores enfocados y ajusta el zoom para que
++## todos aparezcan siempre en pantalla: si se separan se aleja, si se juntan se acerca.
++## Con un solo objetivo (el otro jugador murió) simplemente lo sigue con el zoom normal.
++##
++## Todo el suavizado depende de `delta` (no de frames).
++
++## Margen (en píxeles de mundo) entre los jugadores y el borde de la pantalla.
++@export var margin := 220.0
++## Zoom máximo (1.0 = escala normal). Nunca se acerca más que esto.
++@export var max_zoom := 1.0
++## Rapidez del suavizado del zoom (mayor = más rápido).
++@export var zoom_speed := 4.0
++
++var _targets: Array[Node2D] = []
++var _min_zoom := 0.2
++
++
++func _ready() -> void:
++	position_smoothing_enabled = true
++	position_smoothing_speed = 6.0
++
++
++## Límites del mapa: la cámara no se sale de ellos y el zoom mínimo muestra el mapa entero.
++func set_bounds(bounds: Rect2) -> void:
++	limit_left = int(bounds.position.x)
++	limit_top = int(bounds.position.y)
++	limit_right = int(bounds.end.x)
++	limit_bottom = int(bounds.end.y)
++	var view := get_viewport_rect().size
++	_min_zoom = maxf(view.x / bounds.size.x, view.y / bounds.size.y)
++
++
++## Jugadores que debe enfocar la cámara (se cambia al empezar cada ronda).
++func set_targets(targets: Array[Node2D]) -> void:
++	_targets = targets
++
++
++func get_targets() -> Array[Node2D]:
++	return _targets
++
++
++## Zoom necesario para que `rect` (más el margen) quepa en `view_size`.
++func zoom_for_rect(rect: Rect2, view_size: Vector2) -> float:
++	var needed := Vector2(rect.size.x + margin * 2.0, rect.size.y + margin * 2.0)
++	var fit := minf(view_size.x / needed.x, view_size.y / needed.y)
++	return clampf(fit, _min_zoom, max_zoom)
++
++
++func _process(delta: float) -> void:
++	if _targets.is_empty():
++		return
++	var first := _targets[0].global_position
++	var rect := Rect2(first, Vector2.ZERO)
++	for target in _targets:
++		rect = rect.expand(target.global_position)
++	global_position = rect.get_center()
++	var wanted := zoom_for_rect(rect, get_viewport_rect().size)
++	var weight := 1.0 - exp(-zoom_speed * delta)
++	zoom = zoom.lerp(Vector2(wanted, wanted), weight)
+diff --git a/scripts/characters/character.gd b/scripts/characters/character.gd
+index 900443e..90f9314 100644
+--- a/scripts/characters/character.gd
++++ b/scripts/characters/character.gd
+@@ -17,6 +17,8 @@ const SpriteScript := preload("res://scripts/characters/character_sprite.gd")
+ @export var display_name := "Personaje"
+ @export var base_speed := 230.0
+ @export var body_color := Color(0.35, 0.65, 1.0)
++## Color del nombre bajo el personaje (los jugadores P1/P2 lo usan para distinguirse).
++var name_color := Color.WHITE
+ 
+ var has_bomb := false:
+ 	set(value):
+@@ -77,7 +79,7 @@ func _physics_process(_delta: float) -> void:
+ 		return
+ 	if not has_bomb and game_map != null:
+ 		var use_automatically := can_auto_use_shortcut()
+-		if use_automatically or (self is PlayerCharacter and Input.is_action_just_pressed("shortcut")):
++		if use_automatically or wants_shortcut():
+ 			if game_map.try_use_shortcut(self):
+ 				return
+ 	velocity = get_input_direction().limit_length(1.0) * get_current_speed()
+@@ -95,6 +97,12 @@ func flash_transfer() -> void:
+ 	_transfer_flash_left = 0.9
+ 
+ 
++## Indica si el personaje pide usar un atajo en este frame. PlayerCharacter lo
++## sobrescribe con la tecla de atajo que le corresponde (E / Espacio / E de P1 / Espacio de P2).
++func wants_shortcut() -> bool:
++	return false
++
++
+ ## Dirección deseada de movimiento. La sobrescriben PlayerCharacter y BotCharacter.
+ func get_input_direction() -> Vector2:
+ 	return Vector2.ZERO
+@@ -142,5 +150,5 @@ func _draw() -> void:
+ 		HORIZONTAL_ALIGNMENT_CENTER,
+ 		100.0,
+ 		13,
+-		Color.WHITE
++		name_color
+ 	)
+diff --git a/scripts/characters/player_character.gd b/scripts/characters/player_character.gd
+index 03c2d41..e274cb5 100644
+--- a/scripts/characters/player_character.gd
++++ b/scripts/characters/player_character.gd
+@@ -1,8 +1,26 @@
+ class_name PlayerCharacter
+ extends Character
+ ## Personaje controlado por el usuario con el teclado (RF-03).
+-## Acciones definidas en el Input Map: move_left, move_right, move_up, move_down
+-## (WASD y flechas).
++##
++## Modo 1 jugador (`player_index == 0`): acciones move_left/right/up/down (WASD y flechas)
++## y `shortcut` (E y Espacio).
++## Modo 2 jugadores:
++##   P1 (`player_index == 1`): WASD + E      -> acciones p1_*
++##   P2 (`player_index == 2`): flechas + Espacio -> acciones p2_*
++
++const PLAYER_COLORS := {
++	1: Color(0.25, 0.6, 1.0),
++	2: Color(0.15, 0.85, 0.85),
++}
++
++## 0 = jugador único; 1 = P1; 2 = P2.
++var player_index := 0:
++	set(value):
++		player_index = value
++		if value > 0:
++			display_name = "P%d" % value
++			body_color = PLAYER_COLORS.get(value, body_color)
++			name_color = body_color.lightened(0.3)
+ 
+ 
+ func _init() -> void:
+@@ -12,10 +30,30 @@ func _init() -> void:
+ 
+ 
+ func get_input_direction() -> Vector2:
+-	return Input.get_vector("move_left", "move_right", "move_up", "move_down")
++	var a := _actions()
++	return Input.get_vector(a.left, a.right, a.up, a.down)
++
++
++func wants_shortcut() -> bool:
++	return Input.is_action_just_pressed(_actions().shortcut)
++
++
++## Nombres de las acciones del Input Map que usa este jugador.
++func _actions() -> Dictionary:
++	if player_index == 0:
++		return {
++			"left": "move_left", "right": "move_right", "up": "move_up", "down": "move_down",
++			"shortcut": "shortcut",
++		}
++	var prefix := "p%d_" % player_index
++	return {
++		"left": prefix + "left", "right": prefix + "right", "up": prefix + "up",
++		"down": prefix + "down", "shortcut": prefix + "shortcut",
++	}
+ 
+ 
+ func _notification(what: int) -> void:
+ 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+-		for action in ["move_left", "move_right", "move_up", "move_down"]:
++		var a := _actions()
++		for action in [a.left, a.right, a.up, a.down]:
+ 			Input.action_release(action)
+diff --git a/scripts/maps/minimap.gd b/scripts/maps/minimap.gd
+index b6579cb..598c631 100644
+--- a/scripts/maps/minimap.gd
++++ b/scripts/maps/minimap.gd
+@@ -39,6 +39,8 @@ func _draw() -> void:
+ 			continue
+ 		var point := character.global_position * factor
+ 		if character is PlayerCharacter:
+-			draw_circle(point, 5.0, Color(0.3, 0.65, 1.0))
++			# En 2 jugadores cada uno se ve con su color (P1 / P2); en 1 jugador, azul como siempre.
++			var dot := character.body_color if GameManager.two_players else Color(0.3, 0.65, 1.0)
++			draw_circle(point, 5.0, dot)
+ 		else:
+ 			draw_circle(point, 3.5, Color(0.7, 0.7, 0.7))
+diff --git a/scripts/match/match_controller.gd b/scripts/match/match_controller.gd
+index dc3caad..5aa8ac6 100644
+--- a/scripts/match/match_controller.gd
++++ b/scripts/match/match_controller.gd
+@@ -9,6 +9,13 @@ extends Node2D
+ ##           * si no quedan bots:  VICTORIA
+ ##           * si no: ROUND_END (pausa breve) -> nueva COUNTDOWN
+ ##
++## Modo 2 jugadores (GameManager.two_players): P1 y P2 juegan con la misma cámara.
++##   * Si muere un jugador, la partida sigue y la cámara solo enfoca al que sigue vivo
++##     (el cambio se aplica al empezar la siguiente ronda).
++##   * Si mueren los dos: DERROTA (fin de partida como siempre).
++##   * Si no quedan bots y solo queda un jugador vivo: gana ese jugador ("Ganó P1" / "Ganó P2").
++##     Si quedan los dos jugadores sin bots, se sigue jugando hasta que quede uno.
++##
+ ## Se destruye y recrea al reiniciar la partida (ver main.gd).
+ 
+ enum Phase { COUNTDOWN, ROUND, ROUND_END, DONE }
+@@ -28,7 +35,11 @@ const BOT_COLORS := [
+ @export var bomb_duration := 60.0
+ 
+ var map: GameMap
++## En 1 jugador es el único jugador; en 2 jugadores es P1 (compatibilidad).
+ var player: PlayerCharacter
++## Jugadores humanos: [player] en 1 jugador, [P1, P2] en 2 jugadores.
++var players: Array[PlayerCharacter] = []
++var camera: Camera2D
+ var characters: Array[Character] = []
+ var bomb: BombManager
+ var effects: EffectManager
+@@ -93,11 +104,17 @@ func _build_map() -> void:
+ 
+ func _build_characters() -> void:
+ 	var spawns := map.get_spawn_points()
+-	player = PlayerCharacter.new()
+-	player.game_map = map
+-	add_child(player)
+-	characters.append(player)
+-	var bot_total := clampi(GameManager.bot_count, GameManager.MIN_BOTS, spawns.size() - 1)
++	var human_total := 2 if GameManager.two_players else 1
++	for i in human_total:
++		var human := PlayerCharacter.new()
++		if GameManager.two_players:
++			human.player_index = i + 1
++		human.game_map = map
++		add_child(human)
++		characters.append(human)
++		players.append(human)
++	player = players[0]
++	var bot_total := clampi(GameManager.bot_count, GameManager.MIN_BOTS, spawns.size() - human_total)
+ 	for i in bot_total:
+ 		var bot := BotCharacter.new()
+ 		bot.display_name = BOT_NAMES[i % BOT_NAMES.size()]
+@@ -124,20 +141,56 @@ func _build_systems() -> void:
+ 
+ 
+ func _build_camera() -> void:
+-	var camera := Camera2D.new()
++	if GameManager.two_players:
++		_build_dual_camera()
++		return
++	var follow := Camera2D.new()
+ 	var bounds := map.get_bounds()
+-	camera.limit_left = int(bounds.position.x)
+-	camera.limit_top = int(bounds.position.y)
+-	camera.limit_right = int(bounds.end.x)
+-	camera.limit_bottom = int(bounds.end.y)
+-	camera.position_smoothing_enabled = true
+-	player.add_child(camera)
++	follow.limit_left = int(bounds.position.x)
++	follow.limit_top = int(bounds.position.y)
++	follow.limit_right = int(bounds.end.x)
++	follow.limit_bottom = int(bounds.end.y)
++	follow.position_smoothing_enabled = true
++	player.add_child(follow)
++	camera = follow
++
++
++## Cámara compartida: enfoca el punto medio de los jugadores y ajusta el zoom (ver DualCamera).
++func _build_dual_camera() -> void:
++	var dual := DualCamera.new()
++	add_child(dual)
++	dual.set_bounds(map.get_bounds())
++	camera = dual
++	_update_camera_targets()
++	dual.global_position = _midpoint_of(dual.get_targets())
++	dual.reset_smoothing()
++
++
++## La cámara pasa a enfocar solo a los jugadores que siguen vivos.
++func _update_camera_targets() -> void:
++	var dual := camera as DualCamera
++	if dual == null:
++		return
++	var targets: Array[Node2D] = []
++	for human in players:
++		if not human.is_eliminated:
++			targets.append(human)
++	dual.set_targets(targets)
++
++
++func _midpoint_of(nodes: Array[Node2D]) -> Vector2:
++	if nodes.is_empty():
++		return Vector2.ZERO
++	var sum := Vector2.ZERO
++	for node in nodes:
++		sum += node.global_position
++	return sum / nodes.size()
+ 
+ 
+ func _build_hud() -> void:
+ 	hud = Hud.new()
+ 	add_child(hud)
+-	hud.setup(player, effects, bomb, map, get_alive_characters)
++	hud.setup(player, effects, bomb, map, get_alive_characters, players)
+ 
+ 
+ # --- Rondas -------------------------------------------------------------------
+@@ -159,6 +212,7 @@ func _begin_countdown() -> void:
+ 	_last_tick = -1
+ 	effects.clear_all()
+ 	_reset_positions()
++	_update_camera_targets()
+ 	GameManager.set_state(GameManager.State.COUNTDOWN)
+ 
+ 
+@@ -188,10 +242,11 @@ func _on_bomb_exploded(holder_node: Node) -> void:
+ 	add_child(fx)
+ 	GameEvents.character_eliminated.emit(holder)
+ 
+-	if holder == player:
++	var humans_alive := _alive_human_count()
++	if humans_alive == 0:
+ 		_finish(false)
+-	elif _alive_bot_count() == 0:
+-		_finish(true)
++	elif _alive_bot_count() == 0 and humans_alive == 1:
++		_finish(true, _last_human_alive())
+ 	else:
+ 		GameManager.set_state(GameManager.State.ROUND_END)
+ 		_phase_time = round_end_delay
+@@ -205,8 +260,25 @@ func _alive_bot_count() -> int:
+ 	return count
+ 
+ 
+-func _finish(player_won: bool) -> void:
++func _alive_human_count() -> int:
++	var count := 0
++	for human in players:
++		if not human.is_eliminated:
++			count += 1
++	return count
++
++
++func _last_human_alive() -> PlayerCharacter:
++	for human in players:
++		if not human.is_eliminated:
++			return human
++	return null
++
++
++## `winner` solo se usa en 2 jugadores: su etiqueta ("P1"/"P2") se muestra en el mensaje de victoria.
++func _finish(player_won: bool, winner: PlayerCharacter = null) -> void:
+ 	phase = Phase.DONE
+ 	bomb.stop()
+ 	effects.clear_all()
+-	GameManager.end_match(player_won)
++	var label := winner.display_name if (winner != null and GameManager.two_players) else ""
++	GameManager.end_match(player_won, label)
+diff --git a/scripts/ui/hud.gd b/scripts/ui/hud.gd
+index 56ecbcf..6e90e3d 100644
+--- a/scripts/ui/hud.gd
++++ b/scripts/ui/hud.gd
+@@ -7,6 +7,8 @@ extends CanvasLayer
+ ## Se construye por código para que no dependa de escenas .tscn.
+ 
+ var _player: Character
++## Jugadores humanos (1 en modo normal, 2 en modo 2 jugadores).
++var _humans: Array[Character] = []
+ var _effects: EffectManager
+ var _bomb: BombManager
+ var _characters_provider: Callable
+@@ -21,6 +23,7 @@ var _result_box: CenterContainer
+ var _result_title: Label
+ var _result_detail: Label
+ var _minimap: Minimap
++var _controls_hint: Label
+ 
+ var _center_ttl := 0.0
+ var _toast_ttl := 0.0
+@@ -36,13 +39,21 @@ func setup(
+ 	effects: EffectManager,
+ 	bomb: BombManager,
+ 	game_map: GameMap,
+-	characters_provider: Callable
++	characters_provider: Callable,
++	humans: Array = []
+ ) -> void:
+ 	_player = player
++	_humans.clear()
++	if humans.is_empty():
++		_humans.append(player)
++	else:
++		for human in humans:
++			_humans.append(human as Character)
+ 	_effects = effects
+ 	_bomb = bomb
+ 	_characters_provider = characters_provider
+ 	_build_ui()
++	_controls_hint.visible = GameManager.two_players
+ 	_minimap.setup(game_map, characters_provider)
+ 	_minimap.visible = false
+ 	_minimap.z_index = 100
+@@ -77,9 +88,12 @@ func _process(delta: float) -> void:
+ 	_minimap.queue_redraw()
+ 
+ 	var lines: PackedStringArray = []
+-	for effect in _effects.get_active_for(_player):
+-		var data: Dictionary = effect
+-		lines.append("%s  %.1f s" % [data.label, maxf(0.0, float(data.remaining))])
++	var show_owner := _humans.size() > 1
++	for human in _humans:
++		for effect in _effects.get_active_for(human):
++			var data: Dictionary = effect
++			var owner_prefix := "%s: " % human.display_name if show_owner else ""
++			lines.append("%s%s  %.1f s" % [owner_prefix, data.label, maxf(0.0, float(data.remaining))])
+ 	_effects_label.text = "\n".join(lines)
+ 
+ 	if _center_ttl > 0.0:
+@@ -140,6 +154,16 @@ func _build_ui() -> void:
+ 	_toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+ 	root.add_child(_toast_label)
+ 
++	_controls_hint = _make_label(15)
++	_controls_hint.text = "P1: WASD + E (atajo)      P2: Flechas + Espacio (atajo)"
++	_controls_hint.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
++	_controls_hint.offset_top = -36.0
++	_controls_hint.offset_bottom = -8.0
++	_controls_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
++	_controls_hint.modulate = Color(1.0, 1.0, 1.0, 0.75)
++	_controls_hint.visible = false
++	root.add_child(_controls_hint)
++
+ 	_result_box = CenterContainer.new()
+ 	_result_box.set_anchors_preset(Control.PRESET_FULL_RECT)
+ 	_result_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+@@ -224,16 +248,29 @@ func _on_lucky_block_collected(collector: Node, reward: Dictionary) -> void:
+ 
+ 
+ func _on_match_ended(player_won: bool) -> void:
+-	_result_title.text = "¡VICTORIA!" if player_won else "¡DERROTA!"
+-	_result_detail.text = (
+-		"Eres el último en pie."
+-		if player_won
+-		else "La bomba explotó en tus manos (ronda %d)." % GameManager.round_number
++	var texts := build_result_texts(
++		player_won, GameManager.two_players, GameManager.winner_label, GameManager.round_number
+ 	)
++	_result_title.text = texts[0]
++	_result_detail.text = texts[1]
+ 	_result_box.visible = true
+ 	_update_minimap_visibility()
+ 
+ 
++## Textos de la pantalla final: [título, detalle]. Público y estático para poder probarlo.
++## En 2 jugadores la victoria dice qué jugador ganó ("¡GANÓ P1!" / "¡GANÓ P2!").
++static func build_result_texts(
++	player_won: bool, two_players: bool, winner_label: String, round_number: int
++) -> Array[String]:
++	if two_players:
++		if player_won and winner_label != "":
++			return ["¡GANÓ %s!" % winner_label, "%s es el último en pie." % winner_label]
++		return ["¡DERROTA!", "Ambos jugadores fueron eliminados (ronda %d)." % round_number]
++	if player_won:
++		return ["¡VICTORIA!", "Eres el último en pie."]
++	return ["¡DERROTA!", "La bomba explotó en tus manos (ronda %d)." % round_number]
++
++
+ func _on_effect_applied(_target: Node, _effect_id: String, _duration: float) -> void:
+ 	_update_minimap_visibility()
+ 
+@@ -249,4 +286,8 @@ func _on_bomb_transferred(_from: Node, _to: Node) -> void:
+ func _update_minimap_visibility() -> void:
+ 	if _minimap == null or _player == null or _effects == null:
+ 		return
+-	_minimap.visible = _player.has_bomb and _effects.has_tracking(_player)
++	var show_minimap := false
++	for human in _humans:
++		if human.has_bomb and _effects.has_tracking(human):
++			show_minimap = true
++	_minimap.visible = show_minimap
+diff --git a/scripts/ui/main_menu.gd b/scripts/ui/main_menu.gd
+index 0f57937..63bab25 100644
+--- a/scripts/ui/main_menu.gd
++++ b/scripts/ui/main_menu.gd
+@@ -5,7 +5,9 @@ extends CanvasLayer
+ ## Se rellena mientras se muestran las reglas (entre pulsar "Jugar" y empezar la partida).
+ var rules_screen: RulesScreen
+ var play_button: Button
++var two_players_button: Button
+ 
++var _pending_two_players := false
+ var _volume_slider: HSlider
+ var _bots_spin: SpinBox
+ 
+@@ -69,12 +71,18 @@ func _ready() -> void:
+ 	play_button = Button.new()
+ 	play_button.text = "Jugar"
+ 	play_button.custom_minimum_size = Vector2(320.0, 48.0)
+-	play_button.pressed.connect(_on_play_pressed)
++	play_button.pressed.connect(_on_play_pressed.bind(false))
+ 	box.add_child(play_button)
+ 
++	two_players_button = Button.new()
++	two_players_button.text = "2 Jugadores"
++	two_players_button.custom_minimum_size = Vector2(320.0, 48.0)
++	two_players_button.pressed.connect(_on_play_pressed.bind(true))
++	box.add_child(two_players_button)
++
+ 	var help := Label.new()
+ 	help.text = (
+-		"Mover: WASD / Flechas   ·   Atajo sin bomba: E / Espacio"
++		"1 jugador: WASD / Flechas, atajo E / Espacio   ·   2 jugadores: P1 WASD + E, P2 Flechas + Espacio"
+ 		+ "   ·   Pausa: Esc   ·   Reiniciar: R"
+ 	)
+ 	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+@@ -87,18 +95,22 @@ func _ready() -> void:
+ 	box.add_child(credits)
+ 
+ 
+-## "Jugar" no inicia la partida: primero muestra las reglas y espera a "¡Entendido!".
+-func _on_play_pressed() -> void:
++## "Jugar" / "2 Jugadores" no inician la partida: primero muestran las reglas (y en 2 jugadores
++## los controles de P1 y P2) y esperan a "¡Entendido!".
++func _on_play_pressed(two_players: bool = false) -> void:
+ 	if rules_screen != null:
+ 		return
++	_pending_two_players = two_players
+ 	_set_menu_enabled(false)
+ 	rules_screen = RulesScreen.new()
++	rules_screen.two_players = two_players
+ 	rules_screen.confirmed.connect(_on_rules_confirmed)
+ 	rules_screen.cancelled.connect(_on_rules_cancelled)
+ 	add_child(rules_screen)
+ 
+ 
+ func _on_rules_confirmed() -> void:
++	GameManager.two_players = _pending_two_players
+ 	GameManager.start_match(GameManager.DEFAULT_MAP_ID)
+ 
+ 
+@@ -113,5 +125,6 @@ func _on_rules_cancelled() -> void:
+ ## Mientras las reglas están abiertas, el menú de fondo no debe poder usarse (ni con Tab).
+ func _set_menu_enabled(enabled: bool) -> void:
+ 	play_button.disabled = not enabled
++	two_players_button.disabled = not enabled
+ 	_bots_spin.editable = enabled
+ 	_volume_slider.editable = enabled
+diff --git a/scripts/ui/rules_screen.gd b/scripts/ui/rules_screen.gd
+index a2be853..f30fe95 100644
+--- a/scripts/ui/rules_screen.gd
++++ b/scripts/ui/rules_screen.gd
+@@ -31,6 +31,10 @@ const REWARD_HINTS := {
+ 	"golden_transfer": "la bomba pasa a otro jugador al azar",
+ }
+ 
++## Si es true muestra la versión del modo 2 jugadores (controles de P1 y P2).
++## Debe asignarse antes de añadir la pantalla al árbol.
++var two_players := false
++
+ var confirm_button: Button
+ var back_button: Button
+ 
+@@ -66,7 +70,7 @@ func _ready() -> void:
+ 	panel.add_child(box)
+ 
+ 	var title := Label.new()
+-	title.text = "CÓMO SE JUEGA"
++	title.text = "CÓMO SE JUEGA · 2 JUGADORES" if two_players else "CÓMO SE JUEGA"
+ 	title.add_theme_font_size_override("font_size", 38)
+ 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+ 	box.add_child(title)
+@@ -74,9 +78,9 @@ func _ready() -> void:
+ 	var columns := HBoxContainer.new()
+ 	columns.add_theme_constant_override("separation", 22)
+ 	box.add_child(columns)
+-	columns.add_child(_make_column(build_left_text()))
+-	columns.add_child(_make_column(build_middle_text()))
+-	columns.add_child(_make_column(build_right_text()))
++	columns.add_child(_make_column(build_left_text(two_players)))
++	columns.add_child(_make_column(build_middle_text(two_players)))
++	columns.add_child(_make_column(build_right_text(two_players)))
+ 
+ 	var buttons := HBoxContainer.new()
+ 	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
+@@ -136,7 +140,7 @@ func _make_column(bbcode: String) -> RichTextLabel:
+ 
+ 
+ ## Columna izquierda: objetivo y bomba.
+-static func build_left_text() -> String:
++static func build_left_text(two_players: bool = false) -> String:
+ 	var round_defaults := MatchController.new()
+ 	var bomb_defaults := BombManager.new()
+ 	var countdown := round_defaults.countdown_seconds
+@@ -147,7 +151,11 @@ static func build_left_text() -> String:
+ 	var lines := PackedStringArray()
+ 	lines.append(_heading("OBJETIVO"))
+ 	lines.append("• Quien lleva la bomba es el impostor: si el contador llega a 0, explota y queda eliminado.")
+-	lines.append("• Ganas si todos los bots son eliminados. Pierdes si la bomba te explota a ti: la partida termina al instante.")
++	if two_players:
++		lines.append("• Es una sola pantalla: la cámara enfoca el punto medio entre P1 y P2 y se aleja si se separan.")
++		lines.append("• Gana el último jugador en pie (\"Ganó P1\" o \"Ganó P2\"). Si uno es eliminado, el otro sigue solo. Si mueren los dos, pierden.")
++	else:
++		lines.append("• Ganas si todos los bots son eliminados. Pierdes si la bomba te explota a ti: la partida termina al instante.")
+ 	lines.append("")
+ 	lines.append(_heading("LA BOMBA"))
+ 	lines.append(
+@@ -165,19 +173,25 @@ static func build_left_text() -> String:
+ 
+ 
+ ## Columna central: controles y atajos.
+-static func build_middle_text() -> String:
++static func build_middle_text(two_players: bool = false) -> String:
+ 	var map_defaults := GameMap.new()
+ 	var crossing := map_defaults.shortcut_use_seconds
+ 	map_defaults.free()
+ 	var lines := PackedStringArray()
+ 	lines.append(_heading("CONTROLES"))
+-	lines.append("• Mover: [b]WASD[/b] o [b]flechas[/b]")
+-	lines.append("• Usar atajo: [b]E[/b] o [b]Espacio[/b]")
++	if two_players:
++		lines.append("• [color=#4099ff][b]JUGADOR 1 (P1)[/b][/color]: mover con [b]W A S D[/b]  ·  atajo con [b]E[/b]")
++		lines.append("• [color=#26d9d9][b]JUGADOR 2 (P2)[/b][/color]: mover con las [b]flechas[/b]  ·  atajo con [b]Espacio[/b]")
++	else:
++		lines.append("• Mover: [b]WASD[/b] o [b]flechas[/b]")
++		lines.append("• Usar atajo: [b]E[/b] o [b]Espacio[/b]")
+ 	lines.append("• Pausa: [b]Esc[/b]   ·   Reiniciar: [b]R[/b]")
+ 	lines.append("")
+ 	lines.append(_heading("ATAJOS (solo si NO llevas la bomba)"))
+ 	lines.append(
+ 		"• Acércate a la [color=#ffc740][b]ENTRADA[/b][/color] (círculo amarillo) y pulsa [b]E[/b] o [b]Espacio[/b]. Estar encima no basta."
++		if not two_players
++		else "• Acércate a la [color=#ffc740][b]ENTRADA[/b][/color] (círculo amarillo) y pulsa tu tecla de atajo: [b]E[/b] (P1) o [b]Espacio[/b] (P2). Estar encima no basta."
+ 	)
+ 	lines.append(
+ 		"• El cruce es automático y dura %s s: no puedes moverte ni pasar o recibir la bomba. Sales por la [color=#66e6ff][b]SALIDA[/b][/color] (celeste)."
+@@ -191,7 +205,7 @@ static func build_middle_text() -> String:
+ 
+ 
+ ## Columna derecha: Lucky Blocks.
+-static func build_right_text() -> String:
++static func build_right_text(two_players: bool = false) -> String:
+ 	var spawner_defaults := LuckyBlockSpawner.new()
+ 	var max_blocks := spawner_defaults.max_active_blocks
+ 	var respawn := spawner_defaults.respawn_delay
+@@ -205,6 +219,8 @@ static func build_right_text() -> String:
+ 	lines.append("• El color indica la probabilidad de lo que dan:")
+ 	lines.append_array(_reward_lines())
+ 	lines.append("• Los efectos temporales se pierden al pasar la bomba.")
++	if two_players:
++		lines.append("• En 2 jugadores ambos ven los Lucky Blocks y las habilidades mientras uno de los dos tenga la bomba, pero los efectos solo se aplican a quien la lleva.")
+ 	return "\n".join(lines)
+ 
+ 
+diff --git a/tests/unit/test_input_map.gd b/tests/unit/test_input_map.gd
+index 32a8351..3d8a826 100644
+--- a/tests/unit/test_input_map.gd
++++ b/tests/unit/test_input_map.gd
+@@ -14,3 +14,22 @@ func test_each_movement_action_has_wasd_and_arrow_keys() -> void:
+ 
+ func test_shortcut_has_two_keys() -> void:
+ 	assert_eq(InputMap.action_get_events("shortcut").size(), 2)
++
++
++func test_two_player_actions_exist_with_one_key_each() -> void:
++	for prefix in ["p1_", "p2_"]:
++		for suffix in ["up", "down", "left", "right", "shortcut"]:
++			var action: String = prefix + suffix
++			assert_true(InputMap.has_action(action), "Falta la acción '%s'." % action)
++			assert_eq(InputMap.action_get_events(action).size(), 1, action)
++
++
++func test_p1_uses_wasd_and_e_and_p2_uses_arrows_and_space() -> void:
++	var expected := {
++		"p1_up": KEY_W, "p1_down": KEY_S, "p1_left": KEY_A, "p1_right": KEY_D, "p1_shortcut": KEY_E,
++		"p2_up": KEY_UP, "p2_down": KEY_DOWN, "p2_left": KEY_LEFT, "p2_right": KEY_RIGHT,
++		"p2_shortcut": KEY_SPACE,
++	}
++	for action: String in expected:
++		var event := InputMap.action_get_events(action)[0] as InputEventKey
++		assert_eq(event.physical_keycode, expected[action], action)
+diff --git a/tests/unit/test_two_players.gd b/tests/unit/test_two_players.gd
+new file mode 100644
+index 0000000..ec4b6cf
+--- /dev/null
++++ b/tests/unit/test_two_players.gd
+@@ -0,0 +1,158 @@
++extends GutTest
++## Modo 2 jugadores: controles separados, cámara compartida, fin de partida y mensajes.
++
++var match_node: MatchController
++
++
++func before_each() -> void:
++	GameManager.reset()
++	GameManager.bot_count = 1
++	GameManager.two_players = true
++	GameManager.set_state(GameManager.State.COUNTDOWN)
++	match_node = MatchController.new()
++	match_node.map_id = "tiled"
++	add_child_autofree(match_node)
++	await get_tree().process_frame
++
++
++func after_each() -> void:
++	Input.action_release("p1_right")
++	Input.action_release("p2_right")
++	GameManager.reset()
++	GameManager.bot_count = 3
++
++
++func _start_round() -> void:
++	match_node.debug_skip_countdown()
++	await get_tree().process_frame
++	await get_tree().process_frame
++
++
++func _explode(character: Character) -> void:
++	match_node.bomb.transfer_to(character)
++	match_node.bomb.tick(999.0)
++
++
++func test_spawns_p1_and_p2_plus_bots() -> void:
++	assert_eq(match_node.players.size(), 2)
++	assert_eq(match_node.players[0].display_name, "P1")
++	assert_eq(match_node.players[1].display_name, "P2")
++	assert_eq(match_node.characters.size(), 3)
++	assert_ne(match_node.players[0].body_color, match_node.players[1].body_color)
++	assert_true(match_node.camera is DualCamera, "El modo 2 jugadores usa la cámara compartida.")
++
++
++func test_single_player_mode_is_unchanged() -> void:
++	match_node.queue_free()
++	await get_tree().process_frame
++	GameManager.two_players = false
++	var single := MatchController.new()
++	single.map_id = "tiled"
++	add_child_autofree(single)
++	await get_tree().process_frame
++	assert_eq(single.players.size(), 1)
++	assert_eq(single.player.display_name, "Tú")
++	assert_false(single.camera is DualCamera)
++
++
++func test_each_player_reads_only_its_own_keys() -> void:
++	var p1 := match_node.players[0]
++	var p2 := match_node.players[1]
++	Input.action_press("p1_right")
++	assert_eq(p1.get_input_direction(), Vector2.RIGHT)
++	assert_eq(p2.get_input_direction(), Vector2.ZERO)
++	Input.action_release("p1_right")
++	Input.action_press("p2_right")
++	assert_eq(p1.get_input_direction(), Vector2.ZERO)
++	assert_eq(p2.get_input_direction(), Vector2.RIGHT)
++
++
++func test_shortcut_actions_are_per_player() -> void:
++	assert_eq(match_node.players[0]._actions().shortcut, "p1_shortcut")
++	assert_eq(match_node.players[1]._actions().shortcut, "p2_shortcut")
++
++
++func test_camera_zoom_depends_on_player_distance() -> void:
++	var cam: DualCamera = match_node.camera
++	var view := Vector2(1280.0, 720.0)
++	var near := cam.zoom_for_rect(Rect2(Vector2(500, 500), Vector2(50, 50)), view)
++	var far := cam.zoom_for_rect(Rect2(Vector2(100, 100), Vector2(1400, 900)), view)
++	assert_almost_eq(near, cam.max_zoom, 0.001, "Juntos: zoom normal.")
++	assert_lt(far, near, "Separados: la cámara se aleja.")
++	assert_gt(far, 0.0)
++
++
++func test_camera_centers_on_midpoint_of_both_players() -> void:
++	var cam: DualCamera = match_node.camera
++	match_node.players[0].global_position = Vector2(600, 600)
++	match_node.players[1].global_position = Vector2(1000, 800)
++	cam._process(0.016)
++	assert_eq(cam.global_position, Vector2(800, 700))
++
++
++func test_dead_player_is_dropped_from_camera_on_next_round() -> void:
++	await _start_round()
++	var p1 := match_node.players[0]
++	var p2 := match_node.players[1]
++	_explode(p1)
++	assert_eq(GameManager.state, GameManager.State.ROUND_END, "Con un jugador vivo la partida sigue.")
++	var cam: DualCamera = match_node.camera
++	assert_eq(cam.get_targets().size(), 2, "Durante el fin de ronda aún se ve la explosión.")
++	match_node._begin_countdown()
++	assert_eq(cam.get_targets().size(), 1)
++	assert_eq(cam.get_targets()[0], p2)
++
++
++func test_both_players_dead_ends_match_as_defeat() -> void:
++	await _start_round()
++	_explode(match_node.players[0])
++	match_node._begin_countdown()
++	await _start_round()
++	_explode(match_node.players[1])
++	assert_eq(GameManager.state, GameManager.State.ENDED)
++	assert_false(GameManager.player_won)
++	assert_eq(GameManager.winner_label, "")
++
++
++func test_last_player_standing_wins_with_their_label() -> void:
++	await _start_round()
++	var bot := match_node.characters[2]
++	_explode(bot)
++	assert_eq(GameManager.state, GameManager.State.ROUND_END, "Sin bots, pero siguen los dos jugadores.")
++	match_node._begin_countdown()
++	await _start_round()
++	_explode(match_node.players[0])
++	assert_eq(GameManager.state, GameManager.State.ENDED)
++	assert_true(GameManager.player_won)
++	assert_eq(GameManager.winner_label, "P2")
++
++
++func test_only_bomb_holder_gets_lucky_block_effects() -> void:
++	await _start_round()
++	var p1 := match_node.players[0]
++	var p2 := match_node.players[1]
++	match_node.bomb.transfer_to(p1)
++	var speed: Dictionary = {}
++	for reward in RewardTable.REWARDS:
++		if reward.id == "speed_boost":
++			speed = reward
++	match_node.effects.apply_reward(p1, speed, [p2])
++	assert_gt(p1.get_speed_multiplier(), 1.0)
++	assert_almost_eq(p2.get_speed_multiplier(), 1.0, 0.001)
++
++
++func test_result_texts_per_winner() -> void:
++	assert_eq(Hud.build_result_texts(true, true, "P1", 3)[0], "¡GANÓ P1!")
++	assert_eq(Hud.build_result_texts(true, true, "P2", 3)[0], "¡GANÓ P2!")
++	assert_eq(Hud.build_result_texts(false, true, "", 3)[0], "¡DERROTA!")
++	assert_eq(Hud.build_result_texts(true, false, "", 3)[0], "¡VICTORIA!")
++	assert_eq(Hud.build_result_texts(false, false, "", 3)[0], "¡DERROTA!")
++
++
++func test_rules_screen_two_player_text_lists_both_control_schemes() -> void:
++	var text := RulesScreen.build_middle_text(true)
++	assert_string_contains(text, "P1")
++	assert_string_contains(text, "W A S D")
++	assert_string_contains(text, "P2")
++	assert_string_contains(text, "flechas")
++	assert_string_contains(text, "Espacio")
