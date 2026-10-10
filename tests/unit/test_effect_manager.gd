@@ -24,9 +24,17 @@ func test_speed_boost_is_applied_and_removed() -> void:
 	assert_almost_eq(holder.get_speed_multiplier(), 1.0, 0.001, "Debe volver a la velocidad base.")
 
 
-func test_penalty_slows_down() -> void:
-	fx.apply_effect(holder, "heavy", EffectManager.TYPE_SPEED, 0.7, 4.0)
-	assert_lt(holder.get_current_speed(), holder.base_speed)
+func test_radar_tracks_for_collector_and_marks_rivals() -> void:
+	var radar: Dictionary = {}
+	for reward in RewardTable.REWARDS:
+		if reward.id == "radar":
+			radar = reward
+	fx.apply_reward(holder, radar, [rival])
+	assert_true(fx.has_tracking(holder))
+	assert_true(rival.is_marked())
+	fx.tick(10.1)
+	assert_false(fx.has_tracking(holder))
+	assert_false(rival.is_marked())
 
 
 func test_effects_stack_multiplicatively_and_same_id_refreshes() -> void:
@@ -40,7 +48,6 @@ func test_effects_stack_multiplicatively_and_same_id_refreshes() -> void:
 
 
 func test_mark_rivals_reward_marks_only_rivals() -> void:
-	var reward := RewardTable.pick_by_roll(RewardTable.total_weight() * 0.5)  # radar
 	var radar: Dictionary = {}
 	for r in RewardTable.REWARDS:
 		if r.id == "radar":
@@ -48,9 +55,21 @@ func test_mark_rivals_reward_marks_only_rivals() -> void:
 	fx.apply_reward(holder, radar, [rival])
 	assert_true(rival.is_marked())
 	assert_false(holder.is_marked())
-	fx.tick(9.0)
+	assert_true(fx.has_tracking(holder))
+	fx.tick(10.1)
 	assert_false(rival.is_marked(), "La marca debe retirarse.")
-	assert_not_null(reward)
+	assert_false(fx.has_tracking(holder))
+
+
+func test_radar_effects_are_cleared_when_bomb_is_transferred() -> void:
+	var radar: Dictionary = {}
+	for reward in RewardTable.REWARDS:
+		if reward.id == "radar":
+			radar = reward
+	fx.apply_reward(holder, radar, [rival])
+	GameEvents.bomb_transferred.emit(holder, rival)
+	assert_false(fx.has_tracking(holder))
+	assert_false(rival.is_marked())
 
 
 func test_extra_time_requests_bomb_bonus() -> void:
@@ -67,9 +86,7 @@ func test_clear_for_removes_effects_of_one_character() -> void:
 	assert_almost_eq(rival.get_speed_multiplier(), 1.5, 0.001)
 
 
-func test_apply_reward_jackpot_applies_all_effects() -> void:
+func test_golden_reward_requests_random_transfer() -> void:
 	watch_signals(GameEvents)
 	fx.apply_reward(holder, RewardTable.pick_by_roll(RewardTable.total_weight() - 0.01), [rival])
-	assert_gt(holder.get_speed_multiplier(), 1.0)
-	assert_true(rival.is_marked())
-	assert_signal_emitted(GameEvents, "bomb_time_bonus_requested")
+	assert_signal_emitted(GameEvents, "bomb_transfer_random_requested")

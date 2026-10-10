@@ -13,7 +13,8 @@ if ! command -v "$GODOT" >/dev/null 2>&1; then
 fi
 
 mkdir -p build/web
-"$GODOT" --headless --path . --import >/dev/null 2>&1 || true
+"$GODOT" --headless --path . --import >/dev/null 2>&1
+"$GODOT" --headless --path . -s addons/gut/gut_cmdln.gd -gexit
 "$GODOT" --headless --path . --export-release "Web" build/web/index.html
 
 echo

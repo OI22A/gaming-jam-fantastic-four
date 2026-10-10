@@ -9,8 +9,8 @@ extends Node
 ##   MatchController decide las consecuencias (eliminación).
 ## - Los efectos de "tiempo adicional" llegan por `bomb_time_bonus_requested`.
 
-@export var duration := 25.0
-@export var transfer_cooldown := 1.0
+@export var duration := 60.0
+@export var transfer_cooldown := 1.5
 @export var touch_distance := 40.0
 
 var holder: Character = null
@@ -22,7 +22,9 @@ var _cooldown := 0.0
 
 
 func _ready() -> void:
+	add_to_group("bomb_manager")
 	GameEvents.bomb_time_bonus_requested.connect(add_time)
+	GameEvents.bomb_transfer_random_requested.connect(transfer_to_random)
 
 
 ## `characters` se guarda por referencia; los eliminados se ignoran.
@@ -47,6 +49,10 @@ func stop() -> void:
 	running = false
 
 
+func is_transfer_cooling_down() -> bool:
+	return _cooldown > 0.0
+
+
 func add_time(seconds: float) -> void:
 	if not running:
 		return
@@ -54,8 +60,23 @@ func add_time(seconds: float) -> void:
 	GameEvents.bomb_time_changed.emit(time_left, duration)
 
 
+func transfer_to_random() -> void:
+	var candidates: Array[Character] = []
+	for character in _characters:
+		if character != holder and not character.is_eliminated and not character.is_using_shortcut:
+			candidates.append(character)
+	if candidates.is_empty():
+		return
+	transfer_to(candidates[randi_range(0, candidates.size() - 1)])
+
+
 func transfer_to(new_holder: Character) -> void:
-	if new_holder == null or new_holder == holder:
+	if (
+		new_holder == null
+		or new_holder == holder
+		or new_holder.is_eliminated
+		or new_holder.is_using_shortcut
+	):
 		return
 	var previous := holder
 	if previous != null:
@@ -93,7 +114,7 @@ func _find_touched_character() -> Character:
 	var best: Character = null
 	var best_distance := touch_distance
 	for candidate in _characters:
-		if candidate == holder or candidate.is_eliminated:
+		if candidate == holder or candidate.is_eliminated or candidate.is_using_shortcut:
 			continue
 		var distance := holder.global_position.distance_to(candidate.global_position)
 		if distance <= best_distance:

@@ -25,7 +25,7 @@ const BOT_COLORS := [
 @export var map_id := "park"
 @export var countdown_seconds := 3
 @export var round_end_delay := 2.0
-@export var bomb_duration := 25.0
+@export var bomb_duration := 60.0
 
 var map: GameMap
 var player: PlayerCharacter
@@ -94,6 +94,7 @@ func _build_map() -> void:
 func _build_characters() -> void:
 	var spawns := map.get_spawn_points()
 	player = PlayerCharacter.new()
+	player.game_map = map
 	add_child(player)
 	characters.append(player)
 	var bot_total := clampi(GameManager.bot_count, GameManager.MIN_BOTS, spawns.size() - 1)
@@ -102,6 +103,7 @@ func _build_characters() -> void:
 		bot.display_name = BOT_NAMES[i % BOT_NAMES.size()]
 		bot.body_color = BOT_COLORS[i % BOT_COLORS.size()]
 		bot.arena_bounds = map.get_bounds()
+		bot.game_map = map
 		add_child(bot)
 		characters.append(bot)
 	_reset_positions()
@@ -205,4 +207,6 @@ func _alive_bot_count() -> int:
 
 func _finish(player_won: bool) -> void:
 	phase = Phase.DONE
+	bomb.stop()
+	effects.clear_all()
 	GameManager.end_match(player_won)

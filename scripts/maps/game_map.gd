@@ -9,20 +9,33 @@ extends Node2D
 ## conservando la misma API (get_bounds, get_spawn_points, ...).
 
 const WALL_THICKNESS := 200.0
+const LAYOUT_SCALE := 1.25
+const SHORTCUT_INTERACTION_RADIUS := 56.0
+const SHORTCUT_WIDTH := 96.0
+const SHORTCUT_GATE_DEPTH := 34.0
+const SHORTCUT_WALL_THICKNESS := 12.0
+## Holgura extra entre la zona navegable y los muros del atajo.
+const SHORTCUT_NAV_MARGIN := 4.0
 
 @export var map_id := "map"
 @export var display_name := "Mapa"
-@export var map_size := Vector2(1920.0, 1080.0)
+@export var map_size := Vector2(2400.0, 1350.0)
+@export var shortcut_use_seconds := 3.2
 @export var ground_color := Color(0.35, 0.6, 0.3)
 
 ## Cada obstáculo: {rect: Rect2, kind: String, color: Color}
 var obstacles: Array[Dictionary] = []
 var spawn_points: Array[Vector2] = []
 var lucky_block_points: Array[Vector2] = []
+## Cada atajo tiene una entrada interactiva, una salida y un corredor cerrado.
+var shortcuts: Array[Dictionary] = []
+var _shortcut_busy: Array[bool] = []
 
 
 func _ready() -> void:
 	_define_layout()
+	_scale_layout()
+	_build_navigation()
 	_build_collision()
 	queue_redraw()
 
@@ -34,6 +47,175 @@ func _define_layout() -> void:
 
 func add_obstacle(rect: Rect2, kind: String = "block", color: Color = Color(0.5, 0.5, 0.5)) -> void:
 	obstacles.append({"rect": rect, "kind": kind, "color": color})
+
+
+func add_shortcut(entry: Vector2, exit: Vector2) -> void:
+	shortcuts.append({"entry": entry, "exit": exit})
+
+
+func _scale_layout() -> void:
+	map_size = Vector2(1920.0, 1080.0) * LAYOUT_SCALE
+	for i in obstacles.size():
+		var obstacle: Dictionary = obstacles[i]
+		var rect: Rect2 = obstacle.rect
+		obstacle.rect = Rect2(rect.position * LAYOUT_SCALE, rect.size * LAYOUT_SCALE)
+		obstacles[i] = obstacle
+	for i in spawn_points.size():
+		spawn_points[i] = spawn_points[i] * LAYOUT_SCALE
+	for i in lucky_block_points.size():
+		lucky_block_points[i] = lucky_block_points[i] * LAYOUT_SCALE
+	for i in shortcuts.size():
+		var route: Dictionary = shortcuts[i]
+		var entry: Vector2 = route.entry
+		var exit: Vector2 = route.exit
+		route.entry = entry * LAYOUT_SCALE
+		route.exit = exit * LAYOUT_SCALE
+		shortcuts[i] = route
+		_shortcut_busy.append(false)
+
+
+func _build_navigation() -> void:
+	var region := NavigationRegion2D.new()
+	region.name = "Navigation"
+	region.navigation_layers = 1
+	region.navigation_polygon = _make_navigation_polygon(true)
+	add_child(region)
+
+
+func _make_navigation_polygon(block_shortcuts: bool) -> NavigationPolygon:
+	# Se hornea con NavigationMeshSourceGeometryData2D: une los huecos que se solapan
+	# (corredores que se cruzan entre sí o con obstáculos), cosa que
+	# make_polygons_from_outlines() no soporta ("Convex partition failed").
+	var source := NavigationMeshSourceGeometryData2D.new()
+	source.add_traversable_outline(
+		PackedVector2Array(
+			[
+				Vector2(24, 24),
+				Vector2(map_size.x - 24, 24),
+				map_size - Vector2(24, 24),
+				Vector2(24, map_size.y - 24),
+			]
+		)
+	)
+	for obstacle in obstacles:
+		var rect: Rect2 = obstacle.rect.grow(Character.BODY_RADIUS + 8.0)
+		source.add_obstruction_outline(_rect_outline(rect))
+	if block_shortcuts:
+		for route in shortcuts:
+			source.add_obstruction_outline(_shortcut_nav_outline(route.entry, route.exit))
+	var polygon := NavigationPolygon.new()
+	polygon.agent_radius = 0.0  # Los huecos ya incluyen el radio del cuerpo.
+	NavigationServer2D.bake_from_source_geometry_data(polygon, source)
+	return polygon
+
+
+func _rect_outline(rect: Rect2) -> PackedVector2Array:
+	return _same_winding(
+		PackedVector2Array(
+			[
+				rect.position,
+				Vector2(rect.position.x, rect.end.y),
+				rect.end,
+				Vector2(rect.end.x, rect.position.y),
+			]
+		)
+	)
+
+
+## Todos los huecos deben tener el mismo sentido de giro; si no, al solaparse
+## (p. ej. dos corredores que se cruzan) se anulan entre sí y el horneado falla.
+func _same_winding(outline: PackedVector2Array) -> PackedVector2Array:
+	if not Geometry2D.is_polygon_clockwise(outline):
+		outline.reverse()
+	return outline
+
+
+## Contorno que excluye de la zona navegable el corredor, las puertas y los muros del
+## atajo, pero NO la franja libre delante de la entrada ni detrás de la salida: así un
+## portador (bot) puede llegar hasta quien se quede parado ahí y nadie puede campear.
+func _shortcut_nav_outline(entry: Vector2, exit: Vector2) -> PackedVector2Array:
+	var direction := (exit - entry).normalized()
+	var half_width := (
+		SHORTCUT_WIDTH * 0.5
+		+ SHORTCUT_WALL_THICKNESS * 0.5
+		+ Character.BODY_RADIUS
+		+ SHORTCUT_NAV_MARGIN
+	)
+	# Las puertas están a SHORTCUT_GATE_DEPTH de la entrada/salida; el hueco empieza
+	# justo donde el centro de un personaje deja de poder acercarse a ellas.
+	var inset := (
+		SHORTCUT_GATE_DEPTH
+		- SHORTCUT_WALL_THICKNESS * 0.5
+		- Character.BODY_RADIUS
+		- SHORTCUT_NAV_MARGIN
+	)
+	var side := direction.orthogonal() * half_width
+	var start := entry + direction * inset
+	var end := exit - direction * inset
+	return _same_winding(PackedVector2Array([start + side, end + side, end - side, start - side]))
+
+
+func try_use_shortcut(character: Character) -> bool:
+	if (
+		character == null
+		or character.has_bomb
+		or character.is_eliminated
+		or character.is_using_shortcut
+	):
+		return false
+	for index in shortcuts.size():
+		if _shortcut_busy[index]:
+			continue
+		var route: Dictionary = shortcuts[index]
+		var entry: Vector2 = route.entry
+		var exit: Vector2 = route.exit
+		if character.global_position.distance_to(entry) > SHORTCUT_INTERACTION_RADIUS:
+			continue
+		_shortcut_busy[index] = true
+		character.is_using_shortcut = true
+		character.velocity = Vector2.ZERO
+		var old_z := character.z_index
+		character.z_index = 20
+		var tween := character.create_tween()
+		tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		tween.tween_property(character, "global_position", exit, shortcut_use_seconds)
+		tween.finished.connect(_finish_shortcut.bind(index, character, old_z))
+		return true
+	return false
+
+
+func _finish_shortcut(index: int, character: Character, old_z: int) -> void:
+	if index < _shortcut_busy.size():
+		_shortcut_busy[index] = false
+	if is_instance_valid(character):
+		character.is_using_shortcut = false
+		character.z_index = old_z
+		character.velocity = Vector2.ZERO
+
+
+func nearest_shortcut_entry(from: Vector2) -> Vector2:
+	var best := Vector2.ZERO
+	var distance := INF
+	for route in shortcuts:
+		var entry: Vector2 = route.entry
+		var candidate := from.distance_to(entry)
+		if candidate < distance:
+			distance = candidate
+			best = entry
+	return best
+
+
+func escape_shortcut_entry(from: Vector2, threat: Vector2) -> Vector2:
+	var best := Vector2.ZERO
+	var best_score := -INF
+	for route in shortcuts:
+		var entry: Vector2 = route.entry
+		var exit: Vector2 = route.exit
+		var score := exit.distance_to(threat) - from.distance_to(entry)
+		if score > best_score:
+			best_score = score
+			best = entry
+	return best
 
 
 func get_bounds() -> Rect2:
@@ -63,12 +245,43 @@ func _build_collision() -> void:
 	add_child(body)
 	for obstacle in obstacles:
 		_add_rect_shape(body, obstacle.rect)
+	var shortcut_barriers := StaticBody2D.new()
+	shortcut_barriers.name = "ShortcutBarriers"
+	shortcut_barriers.collision_layer = 1
+	shortcut_barriers.collision_mask = 0
+	add_child(shortcut_barriers)
+	for route in shortcuts:
+		_add_shortcut_walls(shortcut_barriers, route.entry, route.exit)
 	var b := get_bounds()
 	var t := WALL_THICKNESS
 	_add_rect_shape(body, Rect2(b.position.x - t, b.position.y - t, b.size.x + 2.0 * t, t))
 	_add_rect_shape(body, Rect2(b.position.x - t, b.end.y, b.size.x + 2.0 * t, t))
 	_add_rect_shape(body, Rect2(b.position.x - t, b.position.y, t, b.size.y))
 	_add_rect_shape(body, Rect2(b.end.x, b.position.y, t, b.size.y))
+
+
+func _add_shortcut_walls(body: StaticBody2D, entry: Vector2, exit: Vector2) -> void:
+	var direction := (exit - entry).normalized()
+	var side := direction.orthogonal() * (SHORTCUT_WIDTH * 0.5)
+	var entry_gate := entry + direction * SHORTCUT_GATE_DEPTH
+	var exit_gate := exit - direction * SHORTCUT_GATE_DEPTH
+	_add_wall_segment(body, entry_gate + side, exit_gate + side, SHORTCUT_WALL_THICKNESS)
+	_add_wall_segment(body, entry_gate - side, exit_gate - side, SHORTCUT_WALL_THICKNESS)
+	_add_wall_segment(body, entry_gate + side, entry_gate - side, SHORTCUT_WALL_THICKNESS)
+	_add_wall_segment(body, exit_gate + side, exit_gate - side, SHORTCUT_WALL_THICKNESS)
+
+
+func _add_wall_segment(
+	body: StaticBody2D, start: Vector2, end: Vector2, thickness: float
+) -> void:
+	var shape := CollisionShape2D.new()
+	var rectangle := RectangleShape2D.new()
+	var delta := end - start
+	rectangle.size = Vector2(delta.length(), thickness)
+	shape.shape = rectangle
+	shape.position = (start + end) * 0.5
+	shape.rotation = delta.angle()
+	body.add_child(shape)
 
 
 func _add_rect_shape(body: StaticBody2D, rect: Rect2) -> void:
@@ -87,8 +300,48 @@ func _draw() -> void:
 	_draw_surroundings()
 	draw_rect(get_bounds(), ground_color)
 	_draw_ground_details()
+	for route in shortcuts:
+		_draw_shortcut(route.entry, route.exit)
 	for obstacle in obstacles:
 		_draw_obstacle(obstacle)
+
+
+func _draw_shortcut(entry: Vector2, exit: Vector2) -> void:
+	var direction := (exit - entry).normalized()
+	var side := direction.orthogonal() * (SHORTCUT_WIDTH * 0.5)
+	var corridor := PackedVector2Array(
+		[entry + side, exit + side, exit - side, entry - side]
+	)
+	draw_colored_polygon(corridor, Color(0.19, 0.1, 0.32, 0.9))
+	draw_polyline(
+		PackedVector2Array([entry + side, exit + side, exit - side, entry - side, entry + side]),
+		Color(0.8, 0.55, 1.0),
+		6.0
+	)
+	var entry_gate := entry + direction * SHORTCUT_GATE_DEPTH
+	var exit_gate := exit - direction * SHORTCUT_GATE_DEPTH
+	draw_line(entry_gate + side, entry_gate - side, Color(1.0, 0.78, 0.25), 8.0)
+	draw_line(exit_gate + side, exit_gate - side, Color(0.4, 0.9, 1.0), 8.0)
+	draw_circle(entry, 15.0, Color(1.0, 0.78, 0.25))
+	draw_circle(exit, 15.0, Color(0.4, 0.9, 1.0))
+	draw_string(
+		ThemeDB.fallback_font,
+		entry + Vector2(18.0, -16.0),
+		"ENTRADA",
+		HORIZONTAL_ALIGNMENT_LEFT,
+		-1.0,
+		16,
+		Color.WHITE
+	)
+	draw_string(
+		ThemeDB.fallback_font,
+		exit + Vector2(18.0, -16.0),
+		"SALIDA",
+		HORIZONTAL_ALIGNMENT_LEFT,
+		-1.0,
+		16,
+		Color.WHITE
+	)
 
 
 ## Marco de edificios de la ciudad alrededor del mapa (ambientación urbana).

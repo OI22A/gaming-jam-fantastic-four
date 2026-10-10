@@ -44,6 +44,8 @@ func setup(
 	_characters_provider = characters_provider
 	_build_ui()
 	_minimap.setup(game_map, characters_provider)
+	_minimap.visible = false
+	_minimap.z_index = 100
 
 	GameEvents.state_changed.connect(_on_state_changed)
 	GameEvents.countdown_tick.connect(_on_countdown_tick)
@@ -51,13 +53,17 @@ func setup(
 	GameEvents.bomb_exploded.connect(_on_bomb_exploded)
 	GameEvents.lucky_block_collected.connect(_on_lucky_block_collected)
 	GameEvents.match_ended.connect(_on_match_ended)
+	GameEvents.effect_applied.connect(_on_effect_applied)
+	GameEvents.effect_expired.connect(_on_effect_expired)
+	GameEvents.bomb_transferred.connect(_on_bomb_transferred)
 
 
 func _process(delta: float) -> void:
 	if _bomb == null:
 		return
 	var time_left := _bomb.time_left if _bomb.running else 0.0
-	_timer_label.text = "BOMBA  %.1f s" % time_left
+	var total_seconds := maxi(0, int(time_left))
+	_timer_label.text = "BOMBA  %02d:%02d" % [int(total_seconds / 60), total_seconds % 60]
 	_timer_label.add_theme_color_override(
 		"font_color", Color(1.0, 0.3, 0.25) if time_left <= 5.0 and _bomb.running else Color.WHITE
 	)
@@ -67,6 +73,8 @@ func _process(delta: float) -> void:
 		_holder_label.text = "La tiene: %s" % _bomb.holder.display_name
 	else:
 		_holder_label.text = ""
+	_update_minimap_visibility()
+	_minimap.queue_redraw()
 
 	var lines: PackedStringArray = []
 	for effect in _effects.get_active_for(_player):
@@ -113,9 +121,11 @@ func _build_ui() -> void:
 
 	_minimap = Minimap.new()
 	root.add_child(_minimap)
-	_minimap.set_anchors_and_offsets_preset(
-		Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 12
-	)
+	_minimap.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_minimap.offset_left = -252.0
+	_minimap.offset_top = 12.0
+	_minimap.offset_right = -12.0
+	_minimap.offset_bottom = 147.0
 
 	_center_label = _make_label(72)
 	_center_label.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -221,3 +231,22 @@ func _on_match_ended(player_won: bool) -> void:
 		else "La bomba explotó en tus manos (ronda %d)." % GameManager.round_number
 	)
 	_result_box.visible = true
+	_update_minimap_visibility()
+
+
+func _on_effect_applied(_target: Node, _effect_id: String, _duration: float) -> void:
+	_update_minimap_visibility()
+
+
+func _on_effect_expired(_target: Node, _effect_id: String) -> void:
+	_update_minimap_visibility()
+
+
+func _on_bomb_transferred(_from: Node, _to: Node) -> void:
+	_update_minimap_visibility()
+
+
+func _update_minimap_visibility() -> void:
+	if _minimap == null or _player == null or _effects == null:
+		return
+	_minimap.visible = _player.has_bomb and _effects.has_tracking(_player)

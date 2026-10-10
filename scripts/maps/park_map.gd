@@ -38,7 +38,13 @@ func _define_layout() -> void:
 		Vector2(1720.0, 880.0),
 		Vector2(960.0, 330.0),
 		Vector2(960.0, 920.0),
+		Vector2(80.0, 540.0),
+		Vector2(1840.0, 540.0),
+		Vector2(540.0, 120.0),
+		Vector2(1380.0, 960.0),
 	]
+	add_shortcut(Vector2(160.0, 540.0), Vector2(1760.0, 540.0))
+	add_shortcut(Vector2(800.0, 100.0), Vector2(800.0, 980.0))
 	lucky_block_points = [
 		Vector2(480.0, 400.0),
 		Vector2(1440.0, 400.0),
@@ -50,6 +56,7 @@ func _define_layout() -> void:
 
 
 func _draw_ground_details() -> void:
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2(GameMap.LAYOUT_SCALE, GameMap.LAYOUT_SCALE))
 	var path_color := Color(0.78, 0.7, 0.52)
 	draw_rect(Rect2(0.0, 510.0, 1920.0, 60.0), path_color)
 	draw_rect(Rect2(930.0, 0.0, 60.0, 1080.0), path_color)
@@ -64,3 +71,4 @@ func _draw_ground_details() -> void:
 			3.0,
 			colors[i % 3]
 		)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

@@ -1,13 +1,9 @@
 class_name Minimap
 extends Control
-## Minimapa (RF-08). Muestra el mapa a escala y las posiciones relevantes:
-##   - Jugador: azul        - Quien tiene la bomba: rojo
-##   - Marcados (efecto "radar"): anillo amarillo
-##   - Resto de rivales: gris (si `show_unmarked_rivals` es true)
+## Minimapa de rastreo: solo aparece mientras el humano tiene activo Radar.
+## Durante esa habilidad muestra las posiciones de todos los personajes vivos.
 
 @export var panel_size := Vector2(240.0, 135.0)
-@export var show_unmarked_rivals := true
-
 var _map: GameMap
 var _characters_provider: Callable
 
@@ -42,11 +38,7 @@ func _draw() -> void:
 		if character == null:
 			continue
 		var point := character.global_position * factor
-		if character.is_marked():
-			draw_arc(point, 7.0, 0.0, TAU, 16, Color(1.0, 0.9, 0.2), 2.0)
-		if character.has_bomb:
-			draw_circle(point, 5.0, Color(1.0, 0.25, 0.2))
-		elif character is PlayerCharacter:
+		if character is PlayerCharacter:
 			draw_circle(point, 5.0, Color(0.3, 0.65, 1.0))
-		elif character.is_marked() or show_unmarked_rivals:
+		else:
 			draw_circle(point, 3.5, Color(0.7, 0.7, 0.7))

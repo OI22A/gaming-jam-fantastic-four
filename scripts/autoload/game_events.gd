@@ -22,6 +22,7 @@ signal bomb_time_changed(time_left: float, duration: float)
 signal bomb_transferred(from_holder: Node, to_holder: Node)
 signal bomb_exploded(holder: Node)
 signal bomb_time_bonus_requested(seconds: float)
+signal bomb_transfer_random_requested
 
 # --- Lucky Blocks y efectos (RF-06, RF-07) -----------------------------------
 signal lucky_block_collected(collector: Node, reward: Dictionary)

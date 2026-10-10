@@ -10,6 +10,7 @@ signal collected(block: LuckyBlock, collector: Character)
 const SIZE := 30.0
 
 var is_active := true
+var rarity: int = RewardTable.Rarity.COMMON
 var _time := 0.0
 
 
@@ -41,9 +42,17 @@ func _physics_process(_delta: float) -> void:
 
 
 func _process(delta: float) -> void:
+	var human_has_bomb := false
+	for node in get_tree().get_nodes_in_group("characters"):
+		var character := node as Character
+		if character is PlayerCharacter and character.has_bomb and not character.is_eliminated:
+			human_has_bomb = true
+			break
+	visible = is_active and human_has_bomb
 	if is_active:
 		_time += delta
-		queue_redraw()
+		if visible:
+			queue_redraw()
 
 
 func activate() -> void:
@@ -54,8 +63,13 @@ func activate() -> void:
 func _draw() -> void:
 	var bob := sin(_time * 3.0) * 3.0
 	var rect := Rect2(Vector2(-SIZE / 2.0, -SIZE / 2.0 + bob), Vector2(SIZE, SIZE))
-	draw_rect(rect, Color(1.0, 0.82, 0.15))
-	draw_rect(rect, Color(0.45, 0.3, 0.0), false, 3.0)
+	var base := RewardTable.rarity_color(rarity)
+	var ink := base.darkened(0.55)
+	draw_rect(rect, base)
+	# Brillo metálico: franja clara arriba y sombra abajo.
+	draw_rect(Rect2(rect.position + Vector2(3.0, 3.0), Vector2(SIZE - 6.0, 3.0)), base.lightened(0.5))
+	draw_rect(Rect2(rect.position + Vector2(3.0, SIZE - 6.0), Vector2(SIZE - 6.0, 3.0)), base.darkened(0.25))
+	draw_rect(rect, ink, false, 3.0)
 	draw_string(
 		ThemeDB.fallback_font,
 		Vector2(-8.0, 8.0 + bob),
@@ -63,5 +77,5 @@ func _draw() -> void:
 		HORIZONTAL_ALIGNMENT_CENTER,
 		16.0,
 		24,
-		Color(0.45, 0.3, 0.0)
+		ink
 	)

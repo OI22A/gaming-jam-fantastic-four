@@ -20,9 +20,13 @@ var has_bomb := false:
 		if value == has_bomb:
 			return
 		has_bomb = value
+		collision_mask = 3 | (8 if value else 0)
 		queue_redraw()
 var is_eliminated := false
-## effect_id -> multiplicador de velocidad (>1 mejora, <1 penaliza).
+var is_using_shortcut := false
+var game_map: GameMap
+var _transfer_flash_left := 0.0
+## effect_id -> multiplicador de velocidad (>=1, solo mejoras).
 var speed_modifiers: Dictionary = {}
 ## effect_id -> true. Si no está vacío, el personaje está "marcado" (visible en minimapa).
 var marks: Dictionary = {}
@@ -33,6 +37,8 @@ func _ready() -> void:
 	z_index = 2
 	collision_layer = 2
 	collision_mask = 3
+	if has_bomb:
+		collision_mask |= 8
 	motion_mode = CharacterBody2D.MOTION_MODE_FLOATING
 	if get_node_or_null("CollisionShape2D") == null:
 		var shape := CollisionShape2D.new()
@@ -41,18 +47,38 @@ func _ready() -> void:
 		circle.radius = BODY_RADIUS
 		shape.shape = circle
 		add_child(shape)
+	GameEvents.bomb_transferred.connect(_on_bomb_transferred)
+
+
+func _on_bomb_transferred(_from: Node, to: Node) -> void:
+	if to == self:
+		flash_transfer()
 
 
 func _physics_process(_delta: float) -> void:
+	if _transfer_flash_left > 0.0:
+		_transfer_flash_left -= _delta
 	if is_eliminated or not GameManager.is_playing():
 		velocity = Vector2.ZERO
 		return
+	if is_using_shortcut:
+		velocity = Vector2.ZERO
+		return
+	if not has_bomb and game_map != null:
+		var use_automatically := self is BotCharacter
+		if use_automatically or (self is PlayerCharacter and Input.is_action_just_pressed("shortcut")):
+			if game_map.try_use_shortcut(self):
+				return
 	velocity = get_input_direction().limit_length(1.0) * get_current_speed()
 	move_and_slide()
 
 
 func _process(_delta: float) -> void:
 	queue_redraw()
+
+
+func flash_transfer() -> void:
+	_transfer_flash_left = 0.9
 
 
 ## Dirección deseada de movimiento. La sobrescriben PlayerCharacter y BotCharacter.
@@ -76,6 +102,8 @@ func is_marked() -> bool:
 
 
 func _draw() -> void:
+	if _transfer_flash_left > 0.0 and int(_transfer_flash_left * 12.0) % 2 == 0:
+		return
 	if is_marked():
 		draw_arc(Vector2.ZERO, BODY_RADIUS + 8.0, 0.0, TAU, 32, Color(1.0, 0.9, 0.2), 3.0)
 	draw_circle(Vector2.ZERO, BODY_RADIUS, body_color)

@@ -17,10 +17,18 @@ func test_roll_max_returns_legendary() -> void:
 
 func test_rarity_distribution_matches_design() -> void:
 	var dist := RewardTable.rarity_distribution()
-	assert_almost_eq(float(dist[RewardTable.Rarity.COMMON]), 70.0, 0.01)
-	assert_almost_eq(float(dist[RewardTable.Rarity.RARE]), 20.0, 0.01)
-	assert_almost_eq(float(dist[RewardTable.Rarity.EPIC]), 9.0, 0.01)
+	assert_almost_eq(float(dist[RewardTable.Rarity.COMMON]), 74.0, 0.01)
+	assert_almost_eq(float(dist[RewardTable.Rarity.RARE]), 25.0, 0.01)
+	assert_almost_eq(float(dist.get(RewardTable.Rarity.EPIC, 0.0)), 0.0, 0.01)
 	assert_almost_eq(float(dist[RewardTable.Rarity.LEGENDARY]), 1.0, 0.01)
+
+
+func test_rewards_do_not_apply_penalties() -> void:
+	for reward in RewardTable.REWARDS:
+		for effect in reward.effects:
+			assert_gte(float(effect.get("magnitude", 0.0)), 0.0)
+			if effect.type == "speed":
+				assert_gte(float(effect.magnitude), 1.0)
 
 
 func test_every_reward_is_well_formed() -> void:

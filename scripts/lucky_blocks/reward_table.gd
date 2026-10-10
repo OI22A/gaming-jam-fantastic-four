@@ -5,10 +5,8 @@ extends RefCounted
 ## Cada recompensa tiene rareza, peso (probabilidad relativa) y una lista de
 ## efectos. Los pesos suman 100, así que `weight` equivale a porcentaje.
 ##
-## Tipos de efecto (ver EffectManager):
-##   "speed"        multiplicador de velocidad del recolector (>1 mejora, <1 penaliza)
-##   "extra_time"   segundos añadidos (o restados si es negativo) a la bomba
-##   "mark_rivals"  marca a todos los rivales (visibles en el minimapa)
+## Tipos de efecto (ver EffectManager): solo hay recompensas positivas.
+## Los pesos de rareza suman exactamente 100.
 ##
 ## Para balancear el juego basta con editar esta tabla.
 
@@ -21,89 +19,56 @@ const RARITY_NAMES := {
 	Rarity.LEGENDARY: "Legendaria",
 }
 const RARITY_COLORS := {
-	Rarity.COMMON: Color(0.8, 0.8, 0.8),
-	Rarity.RARE: Color(0.35, 0.65, 1.0),
+	Rarity.COMMON: Color(0.80, 0.50, 0.20),
+	Rarity.RARE: Color(0.78, 0.80, 0.84),
 	Rarity.EPIC: Color(0.75, 0.4, 1.0),
-	Rarity.LEGENDARY: Color(1.0, 0.75, 0.2),
+	Rarity.LEGENDARY: Color(1.0, 0.84, 0.0),
 }
 
 const REWARDS := [
 	{
 		"id": "speed_boost",
-		"name": "Zapatillas veloces",
+		"name": "Velocidad +25 %",
 		"rarity": Rarity.COMMON,
-		"weight": 28,
-		"effects": [{"type": "speed", "magnitude": 1.4, "duration": 5.0}],
-	},
-	{
-		"id": "extra_time_small",
-		"name": "Mecha lenta (+3 s)",
-		"rarity": Rarity.COMMON,
-		"weight": 24,
-		"effects": [{"type": "extra_time", "magnitude": 3.0, "duration": 0.0}],
-	},
-	{
-		"id": "heavy_boots",
-		"name": "Botas pesadas (penalización)",
-		"rarity": Rarity.COMMON,
-		"weight": 10,
-		"effects": [{"type": "speed", "magnitude": 0.7, "duration": 4.0}],
-	},
-	{
-		"id": "short_fuse",
-		"name": "Mecha corta (-3 s)",
-		"rarity": Rarity.COMMON,
-		"weight": 8,
-		"effects": [{"type": "extra_time", "magnitude": -3.0, "duration": 0.0}],
+		"weight": 74.0 / 3.0,
+		"effects": [{"type": "speed", "magnitude": 1.25, "duration": 10.0}],
 	},
 	{
 		"id": "radar",
-		"name": "Radar (marca a los rivales)",
+		"name": "Radar",
+		"rarity": Rarity.COMMON,
+		"weight": 74.0 / 3.0,
+		"effects": [{"type": "mark_rivals", "magnitude": 0.0, "duration": 10.0}],
+	},
+	{
+		"id": "extra_time",
+		"name": "Tiempo extra +5 s",
+		"rarity": Rarity.COMMON,
+		"weight": 74.0 / 3.0,
+		"effects": [{"type": "extra_time", "magnitude": 5.0, "duration": 0.0}],
+	},
+	{
+		"id": "silver_speed",
+		"name": "Velocidad +50 %",
 		"rarity": Rarity.RARE,
-		"weight": 12,
-		"effects": [{"type": "mark_rivals", "magnitude": 0.0, "duration": 8.0}],
+		"weight": 25,
+		"effects": [{"type": "speed", "magnitude": 1.5, "duration": 10.0}],
 	},
 	{
-		"id": "speed_burst",
-		"name": "Ráfaga de velocidad",
-		"rarity": Rarity.RARE,
-		"weight": 8,
-		"effects": [{"type": "speed", "magnitude": 1.6, "duration": 7.0}],
-	},
-	{
-		"id": "super_speed",
-		"name": "Súper velocidad",
-		"rarity": Rarity.EPIC,
-		"weight": 5,
-		"effects": [{"type": "speed", "magnitude": 1.9, "duration": 6.0}],
-	},
-	{
-		"id": "extra_time_big",
-		"name": "Mecha larga (+6 s)",
-		"rarity": Rarity.EPIC,
-		"weight": 4,
-		"effects": [{"type": "extra_time", "magnitude": 6.0, "duration": 0.0}],
-	},
-	{
-		"id": "jackpot",
-		"name": "¡JACKPOT!",
+		"id": "golden_transfer",
+		"name": "Transferencia dorada",
 		"rarity": Rarity.LEGENDARY,
 		"weight": 1,
-		"effects":
-		[
-			{"type": "speed", "magnitude": 2.0, "duration": 8.0},
-			{"type": "extra_time", "magnitude": 8.0, "duration": 0.0},
-			{"type": "mark_rivals", "magnitude": 0.0, "duration": 8.0},
-		],
+		"effects": [{"type": "transfer_random", "magnitude": 0.0, "duration": 0.0}],
 	},
 ]
 
 
-static func total_weight() -> int:
-	var total := 0
+static func total_weight() -> float:
+	var total := 0.0
 	for reward in REWARDS:
 		var entry: Dictionary = reward
-		total += int(entry.weight)
+		total += float(entry.weight)
 	return total
 
 
@@ -115,6 +80,26 @@ static func pick(rng: RandomNumberGenerator = null) -> Dictionary:
 	else:
 		roll = randf() * total_weight()
 	return pick_by_roll(roll)
+
+
+static func pick_rarity(rng: RandomNumberGenerator = null) -> int:
+	return int(pick(rng).rarity)
+
+
+static func pick_for_rarity(rarity: int, rng: RandomNumberGenerator = null) -> Dictionary:
+	var options: Array[Dictionary] = []
+	for reward in REWARDS:
+		var entry: Dictionary = reward
+		if int(entry.rarity) == rarity:
+			options.append(entry)
+	if options.is_empty():
+		return {}
+	var index := (
+		rng.randi_range(0, options.size() - 1)
+		if rng != null
+		else randi_range(0, options.size() - 1)
+	)
+	return options[index].duplicate(true)
 
 
 ## Versión determinista: `roll` en [0, total_weight()). Pensada para pruebas.

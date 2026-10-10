@@ -3,22 +3,19 @@ extends Character
 ## Bot controlado por IA (RF-04).
 ##
 ## Comportamiento (se decide cada `decision_interval` segundos):
-## - Con la bomba: persigue al rival más cercano; a veces se desvía a un Lucky Block.
-## - Sin la bomba: huye de quien la tiene si está a la vista; si no, deambula.
+## - Con la bomba: prioriza el Lucky Block más cercano si está más cerca que el rival.
+## - Sin la bomba: huye del portador y busca un atajo que aumente la distancia.
 ## - Evita obstáculos con rayos de detección (capa 1) y rodeándolos.
 ## - Cerca de los bordes, al huir, se empuja hacia el centro para no quedar arrinconado.
 ##
-## Para ajustar la dificultad: `base_speed`, `decision_interval`, `sight_range`
-## y `block_seek_chance`.
+## Para ajustar la dificultad: `base_speed` y `decision_interval`.
 
 enum Mode { WANDER, CHASE, FLEE, SEEK_BLOCK }
 
 const AVOID_ANGLES := [0.0, 0.6, -0.6, 1.2, -1.2, 1.9, -1.9]
 
-@export var sight_range := 700.0
 @export var decision_interval := 0.25
 @export var ray_length := 60.0
-@export_range(0.0, 1.0) var block_seek_chance := 0.3
 
 var arena_bounds := Rect2(0.0, 0.0, 1920.0, 1080.0)
 var mode: Mode = Mode.WANDER
@@ -29,11 +26,12 @@ var _desired := Vector2.ZERO
 var _timer := 0.0
 var _last_position := Vector2.ZERO
 var _rng := RandomNumberGenerator.new()
+var _navigation: NavigationAgent2D
 
 
 func _init() -> void:
 	display_name = "Bot"
-	base_speed = 205.0
+	base_speed = 230.0
 	body_color = Color(1.0, 0.45, 0.35)
 
 
@@ -42,6 +40,19 @@ func _ready() -> void:
 	_rng.randomize()
 	_timer = _rng.randf_range(0.0, decision_interval)
 	_last_position = global_position
+	_navigation = NavigationAgent2D.new()
+	_navigation.name = "NavigationAgent2D"
+	_navigation.navigation_layers = 1
+	_navigation.path_desired_distance = 18.0
+	_navigation.target_desired_distance = 22.0
+	_navigation.radius = BODY_RADIUS
+	add_child(_navigation)
+	GameEvents.bomb_transferred.connect(_on_role_changed)
+
+
+func _on_role_changed(_from: Node, _to: Node) -> void:
+	_timer = 0.0
+	_decide()
 
 
 func get_input_direction() -> Vector2:
@@ -49,6 +60,15 @@ func get_input_direction() -> Vector2:
 	if _timer <= 0.0:
 		_timer = decision_interval * _rng.randf_range(0.8, 1.4)
 		_decide()
+	if _navigation != null:
+		_navigation.navigation_layers = 1
+		_navigation.target_position = (
+			_goal if _goal != Vector2.ZERO else global_position + _desired * 300.0
+		)
+		var next_point := _navigation.get_next_path_position()
+		var path_direction := next_point - global_position
+		if path_direction.length() > 4.0:
+			return _steer(path_direction.normalized())
 	return _steer(_desired)
 
 
@@ -58,26 +78,47 @@ func _decide() -> void:
 	var others := _get_others()
 
 	if has_bomb:
-		if mode == Mode.SEEK_BLOCK and is_instance_valid(_goal_block) and _goal_block.is_active:
-			_desired = _direction_to(_goal_block.global_position)
+		var prey := _nearest(others)
+		var bomb_manager := get_tree().get_first_node_in_group("bomb_manager") as BombManager
+		if (
+			prey != null
+			and bomb_manager != null
+			and global_position.distance_to(prey.global_position) <= bomb_manager.touch_distance
+			and bomb_manager.is_transfer_cooling_down()
+		):
+			mode = Mode.CHASE
+			_goal = global_position
+			_desired = Vector2.ZERO
 			return
 		_goal_block = _pick_block()
-		if _goal_block != null:
+		if _goal_block != null and (
+			prey == null
+			or global_position.distance_to(_goal_block.global_position)
+			< global_position.distance_to(prey.global_position)
+		):
 			mode = Mode.SEEK_BLOCK
-			_desired = _direction_to(_goal_block.global_position)
+			_goal = _goal_block.global_position
+			_desired = _direction_to(_goal)
 			return
-		var prey := _nearest(others)
 		if prey != null:
 			mode = Mode.CHASE
-			_desired = _direction_to(prey.global_position)
+			_goal = prey.global_position
+			_desired = _direction_to(_goal)
 			return
 	else:
 		var holder := _find_holder(others)
-		if holder != null and global_position.distance_to(holder.global_position) < sight_range:
+		if holder != null:
 			mode = Mode.FLEE
+			if game_map != null:
+				var escape_entry := game_map.escape_shortcut_entry(global_position, holder.global_position)
+				if escape_entry != Vector2.ZERO:
+					_goal = escape_entry
+					_desired = _direction_to(_goal)
+					return
 			var away := (global_position - holder.global_position).normalized()
 			var steer := away + _edge_push() * 1.2
 			_desired = steer.normalized() if steer.length() > 0.01 else away
+			_goal = global_position + _desired * 300.0
 			return
 
 	mode = Mode.WANDER
@@ -93,7 +134,12 @@ func _get_others() -> Array[Character]:
 	var result: Array[Character] = []
 	for node in get_tree().get_nodes_in_group("characters"):
 		var other := node as Character
-		if other != null and other != self and not other.is_eliminated:
+		if (
+        			other != null
+        			and other != self
+        			and not other.is_eliminated
+        			and not other.is_using_shortcut
+        		):
 			result.append(other)
 	return result
 
@@ -117,10 +163,8 @@ func _nearest(others: Array[Character]) -> Character:
 
 
 func _pick_block() -> LuckyBlock:
-	if _rng.randf() > block_seek_chance:
-		return null
 	var best: LuckyBlock = null
-	var best_distance := 450.0
+	var best_distance := INF
 	for node in get_tree().get_nodes_in_group("lucky_blocks"):
 		var block := node as LuckyBlock
 		if block == null or not block.is_active:
