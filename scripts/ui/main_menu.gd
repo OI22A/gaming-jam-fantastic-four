@@ -5,7 +5,9 @@ extends CanvasLayer
 ## Se rellena mientras se muestran las reglas (entre pulsar "Jugar" y empezar la partida).
 var rules_screen: RulesScreen
 var play_button: Button
+var two_players_button: Button
 
+var _pending_two_players := false
 var _volume_slider: HSlider
 var _bots_spin: SpinBox
 
@@ -69,12 +71,18 @@ func _ready() -> void:
 	play_button = Button.new()
 	play_button.text = "Jugar"
 	play_button.custom_minimum_size = Vector2(320.0, 48.0)
-	play_button.pressed.connect(_on_play_pressed)
+	play_button.pressed.connect(_on_play_pressed.bind(false))
 	box.add_child(play_button)
+
+	two_players_button = Button.new()
+	two_players_button.text = "2 Jugadores"
+	two_players_button.custom_minimum_size = Vector2(320.0, 48.0)
+	two_players_button.pressed.connect(_on_play_pressed.bind(true))
+	box.add_child(two_players_button)
 
 	var help := Label.new()
 	help.text = (
-		"Mover: WASD / Flechas   ·   Atajo sin bomba: E / Espacio"
+		"1 jugador: WASD / Flechas, atajo E / Espacio   ·   2 jugadores: P1 WASD + E, P2 Flechas + Espacio"
 		+ "   ·   Pausa: Esc   ·   Reiniciar: R"
 	)
 	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -87,18 +95,22 @@ func _ready() -> void:
 	box.add_child(credits)
 
 
-## "Jugar" no inicia la partida: primero muestra las reglas y espera a "¡Entendido!".
-func _on_play_pressed() -> void:
+## "Jugar" / "2 Jugadores" no inician la partida: primero muestran las reglas (y en 2 jugadores
+## los controles de P1 y P2) y esperan a "¡Entendido!".
+func _on_play_pressed(two_players: bool = false) -> void:
 	if rules_screen != null:
 		return
+	_pending_two_players = two_players
 	_set_menu_enabled(false)
 	rules_screen = RulesScreen.new()
+	rules_screen.two_players = two_players
 	rules_screen.confirmed.connect(_on_rules_confirmed)
 	rules_screen.cancelled.connect(_on_rules_cancelled)
 	add_child(rules_screen)
 
 
 func _on_rules_confirmed() -> void:
+	GameManager.two_players = _pending_two_players
 	GameManager.start_match(GameManager.DEFAULT_MAP_ID)
 
 
@@ -113,5 +125,6 @@ func _on_rules_cancelled() -> void:
 ## Mientras las reglas están abiertas, el menú de fondo no debe poder usarse (ni con Tab).
 func _set_menu_enabled(enabled: bool) -> void:
 	play_button.disabled = not enabled
+	two_players_button.disabled = not enabled
 	_bots_spin.editable = enabled
 	_volume_slider.editable = enabled

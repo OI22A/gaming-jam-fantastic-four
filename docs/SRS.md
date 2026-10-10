@@ -39,7 +39,8 @@ Los valores marcados **[param]** son valores de partida ajustables, no decisione
 - El número de bots se conserva ajustable desde el menú (1–5 bots; un humano, valor inicial 3 bots).
 - **Portador humano:** puede recoger Lucky Blocks. El minimapa, en la esquina superior derecha, solo aparece durante Radar y entonces muestra todos los personajes vivos. No puede usar atajos.
 - **No portador:** no recoge Lucky Blocks y puede usar los atajos. Los bots pueden recoger bloques cuando llevan la bomba.
-- No existe modo fantasma: si el humano muere, se muestran los resultados y no observa rondas posteriores.
+- No existe modo fantasma: si el humano muere, se muestran los resultados y no observa rondas posteriores. *(En el modo 2 jugadores esto aplica cuando mueren ambos humanos; ver RF-11.)*
+- **Modos de juego:** 1 jugador (por defecto) y 2 jugadores locales en un mismo teclado (RF-11). El menú ofrece un botón para cada modo; el número de bots es común a ambos.
 
 ## Orden de implementación
 
@@ -48,6 +49,7 @@ Los valores marcados **[param]** son valores de partida ajustables, no decisione
 10. Audio · Pulido (**Fase 3**)
 
 RF-10 (web) es transversal: se exporta y prueba desde la Fase 1.
+RF-11 (modo 2 jugadores) se construye sobre las Fases 1 y 2 ya existentes y no cambia el modo de 1 jugador.
 
 ---
 
@@ -63,7 +65,7 @@ Base compartida (`CharacterBody2D`) para el humano y el número de bots configur
   - Izquierda: `A` y `←`
   - Derecha: `D` y `→`
   - Las letras se asignan por **tecla física** (physical keycode) para que WASD funcione igual en teclados no QWERTY.
-- **RF-03.1.2 Equivalencia.** WASD y las flechas son equivalentes y se pueden usar de forma indistinta o combinada.
+- **RF-03.1.2 Equivalencia.** En el modo de 1 jugador, WASD y las flechas son equivalentes y se pueden usar de forma indistinta o combinada. En el modo de 2 jugadores **dejan de ser equivalentes** y se reparten entre P1 y P2 (RF-11.2).
 - **RF-03.1.3 Dirección en 8 sentidos.** La dirección se obtiene con `Input.get_vector("move_left", "move_right", "move_up", "move_down")`, que devuelve un vector **normalizado**. La velocidad diagonal es igual a la ortogonal.
 - **RF-03.1.4 Teclas opuestas.** Si se pulsan dos teclas opuestas (A+D o W+S), se cancelan y el jugador no se mueve en ese eje.
 - **RF-03.1.5 Velocidad.** `velocity = direccion * VELOCIDAD_BASE * multiplicador_velocidad`, aplicada con `move_and_slide()` dentro de `_physics_process`. Vista cenital (top-down), sin gravedad.
@@ -80,8 +82,9 @@ Base compartida (`CharacterBody2D`) para el humano y el número de bots configur
 - **RF-03.2** Humano y bots usan la misma escena y velocidad base (230 px/s). Solo cambia la fuente de dirección (teclado o IA).
 - **RF-03.3** Los jugadores colisionan con los obstáculos del mapa y no los atraviesan.
 - **RF-03.4** Al escuchar `bomb_transferred`, se actualiza el rol y la capacidad de usar atajos. El portador no puede activarlos.
-- **RF-03.5** El humano no portador debe pulsar E o Espacio al estar junto a la entrada marcada; estar encima no activa el atajo. Los bots conservan su activación automática al alcanzar esa entrada. Cada atajo es una zona cerrada, con una única entrada y una salida de sentido único. Solo la animación controlada de 3.2 s atraviesa la zona: no hay movimiento libre dentro de ella. Ningún personaje puede entrar caminando; el portador choca con el perímetro y no puede activar el acceso. El atajo queda bloqueado durante todo el cruce y el personaje no puede recibir ni transferir la bomba hasta salir. La salida no permite volver a entrar. Sonido del atajo: ver RF-09b.8.
-- **RF-03.6** Al ser eliminado, el humano termina la partida inmediatamente; no existe modo fantasma.
+- **RF-03.5** El humano no portador debe pulsar su tecla de atajo (E o Espacio en 1 jugador; E para P1 y Espacio para P2 en 2 jugadores) al estar junto a la entrada marcada; estar encima no activa el atajo. Los bots conservan su activación automática al alcanzar esa entrada. Cada atajo es una zona cerrada, con una única entrada y una salida de sentido único. Solo la animación controlada de 3.2 s atraviesa la zona: no hay movimiento libre dentro de ella. Ningún personaje puede entrar caminando; el portador choca con el perímetro y no puede activar el acceso. El atajo queda bloqueado durante todo el cruce y el personaje no puede recibir ni transferir la bomba hasta salir. La salida no permite volver a entrar. Sonido del atajo: ver RF-09b.8.
+- **RF-03.6** Al ser eliminado, el humano termina la partida inmediatamente; no existe modo fantasma. *(En 2 jugadores la partida solo termina cuando mueren los dos; ver RF-11.5.)*
+- **RF-03.8** `PlayerCharacter` tiene un `player_index` (0 = jugador único, 1 = P1, 2 = P2) que decide qué acciones del Input Map lee (`move_*`/`shortcut`, `p1_*` o `p2_*`). La petición de atajo se expone con el método virtual `Character.wants_shortcut()` (los bots no lo usan: entran solos).
 - **RF-03.7** La velocidad es modificable por el sistema de efectos mediante multiplicadores positivos, sin tocar `VELOCIDAD_BASE`.
 
 **Aceptación**
@@ -128,10 +131,11 @@ Base compartida (`CharacterBody2D`) para el humano y el número de bots configur
 ## 4. RF-01 Gestión de partidas
 
 - **RF-01.1** Estados: `MENÚ → JUGANDO → TERMINADA`. La partida se inicia desde el menú.
-- **RF-01.2** Al iniciar: carga el mapa seleccionado, instancia 1 humano + 1–10 bots (inicial 3), asigna puntos de aparición y arranca la bomba.
+- **RF-01.2** Al iniciar: carga el mapa seleccionado, instancia 1 humano (2 en modo 2 jugadores) + 1–10 bots (inicial 3; en 2 jugadores el máximo efectivo es 10 porque el mapa tiene 12 puntos de aparición), asigna puntos de aparición y arranca la bomba.
 - **RF-01.3** Al recibir `character_eliminated`, se marca al jugador fuera. Si es el humano, la partida termina y se muestran resultados.
-- **RF-01.4** La partida termina al morir el humano o cuando no quedan bots vivos; emite `match_ended(player_won)`.
+- **RF-01.4** La partida termina al morir el humano o cuando no quedan bots vivos; emite `match_ended(player_won)`. *(En 2 jugadores: ver RF-11.5.)*
 - **RF-01.5** Victoria si el ganador es el humano. Derrota y fin inmediato si fue eliminado.
+- **RF-01.8** `GameManager` guarda el modo elegido (`two_players`) y, al terminar, quién ganó (`winner_label`: `"P1"`, `"P2"` o vacío). La señal `match_ended(player_won)` **no cambia** de firma. Reiniciar (`R` o "Jugar de nuevo") conserva el modo.
 - **RF-01.6** Reiniciar limpia efectos, bloques y jugadores, y comienza una partida nueva.
 - **RF-01.7 Máquina de Estados Global (`GameManager.State`):** El sistema debe regirse estrictamente por una máquina de estados centralizada que controle el flujo del juego, ignorando inputs no correspondientes al estado activo:
   - `MENU`: Estado inicial. Transiciona a `COUNTDOWN` mediante la señal `match_requested`.
@@ -168,6 +172,8 @@ Base compartida (`CharacterBody2D`) para el humano y el número de bots configur
 - **RF-09a.4** Indicador de efectos activos y su tiempo restante.
 - **RF-09a.5** Pantalla de resultados: victoria o derrota, con opciones de reiniciar y volver al menú.
 - **RF-09a.6** Al morir el humano, se muestra derrota sin modo fantasma.
+- **RF-09a.7** El menú principal tiene el botón **"Jugar"** (1 jugador) y el botón **"2 Jugadores"**. Ambos abren primero la pantalla de reglas; en 2 jugadores esa pantalla emergente explica los controles (RF-11.3).
+- **RF-09a.8** Indicador de efectos activos: en 2 jugadores cada línea lleva el prefijo del jugador (`P1:` / `P2:`). En 2 jugadores se muestra además, abajo, un recordatorio de teclas de P1 y P2.
 
 **Aceptación:** el HUD refleja el estado actual en todo momento.
 
@@ -217,7 +223,7 @@ Base compartida (`CharacterBody2D`) para el humano y el número de bots configur
 ## 9. RF-08 Minimapa
 
 - **RF-08.1** El minimapa se ubica arriba a la derecha, en una capa visible sobre el HUD, y permanece oculto excepto mientras el humano que lleva la bomba tenga activo el efecto Radar.
-- **RF-08.2** Durante Radar muestra el mapa de referencia y la posición de todos los personajes vivos; el humano se distingue visualmente.
+- **RF-08.2** Durante Radar muestra el mapa de referencia y la posición de todos los personajes vivos; el humano se distingue visualmente. En 2 jugadores el minimapa aparece si **cualquiera** de los dos humanos lleva la bomba y tiene Radar, y P1/P2 se dibujan con su propio color.
 - **RF-08.3** Al vencer Radar o transferirse la bomba, el minimapa se oculta inmediatamente. Los Lucky Blocks no se dibujan en él.
 - **RF-08.4** El rastreo y el minimapa duran `DURACION_EFECTO` (10 s).
 
@@ -282,6 +288,7 @@ Para garantizar el desacoplamiento total de los módulos, el software debe imple
 | **Partida** | `round_started(ronda_num, portador)` | MatchController | HUD, AudioManager |
 | **Partida** | `character_eliminated(personaje)` | MatchController | Core del sistema |
 | **Partida** | `match_ended(player_won)` | GameManager | HUD, AudioManager |
+| *(sin señal nueva)* | El ganador de 2 jugadores se lee de `GameManager.winner_label` al recibir `match_ended`. | GameManager | HUD |
 | **Bomba** | `bomb_time_changed(tiempo_restante, duracion)`| BombManager | AudioManager |
 | **Bomba** | `bomb_transferred(from_player, to_player)` | BombManager | AudioManager, Minimapa |
 | **Bomba** | `bomb_exploded(portador)` | BombManager | MatchController, HUD, AudioManager |
@@ -304,9 +311,47 @@ El motor de física de Godot se debe parametrizar bajo la siguiente matriz de as
 
 ---
 
+## 13. RF-11 Modo 2 jugadores
+
+Modo local para dos personas en el mismo teclado y **la misma pantalla** (no hay pantalla dividida). Los bots siguen presentes (mismo ajuste de menú).
+
+- **RF-11.1 Acceso.** El menú principal incluye el botón "2 Jugadores". Al pulsarlo se muestra la pantalla de reglas en versión 2 jugadores y, al confirmar con "¡Entendido!", empieza la partida con `GameManager.two_players = true`. "Jugar" sigue iniciando el modo de 1 jugador.
+- **RF-11.2 Jugadores y controles.** Aparecen dos humanos identificados como **P1** (azul) y **P2** (turquesa); el nombre bajo cada personaje y los mensajes usan esas etiquetas. Cada uno tiene sus propias acciones del Input Map, definidas por tecla física:
+
+| Jugador | Mover | Atajo | Acciones |
+|---|---|---|---|
+| P1 | `W` `A` `S` `D` | `E` | `p1_up/down/left/right`, `p1_shortcut` |
+| P2 | `↑` `←` `↓` `→` | `Espacio` | `p2_up/down/left/right`, `p2_shortcut` |
+
+  Las acciones del modo 1 jugador (`move_*`, `shortcut`) se conservan sin cambios.
+- **RF-11.3 Pantalla emergente de controles.** Antes de empezar, la pantalla de reglas (título "CÓMO SE JUEGA · 2 JUGADORES") indica: P1 se mueve con W A S D y usa los atajos con E; P2 se mueve con las flechas y usa los atajos con Espacio. También explica la cámara compartida y la condición de victoria. "Volver" o `Esc` cancelan sin iniciar la partida.
+- **RF-11.4 Cámara compartida (`DualCamera`).** Una única cámara se centra en el **punto medio** de los jugadores enfocados y ajusta el zoom para que todos aparezcan siempre (con un margen de 220 px **[param]**): si se separan se aleja, si se juntan se acerca hasta el zoom normal (1.0). El zoom mínimo es el que muestra el mapa completo, y la cámara respeta los límites del mapa. El suavizado de posición y de zoom depende de `delta`, no de frames.
+- **RF-11.5 Muerte y fin de partida.**
+  - Si un jugador muere y el otro sigue vivo, la partida continúa. La cámara pasa a enfocar **solo al jugador vivo a partir de la siguiente ronda** (durante el `ROUND_END` aún se ve la explosión).
+  - Si mueren los dos, la partida termina como siempre (`ENDED`, derrota) con las mismas opciones: jugar de nuevo y menú.
+  - **Victoria:** cuando no quedan bots y queda un solo jugador vivo, gana ese jugador. Si no quedan bots pero siguen vivos los dos, las rondas continúan hasta que quede uno **[asumido]**.
+- **RF-11.6 Mensajes de resultado.** Victoria: "¡GANÓ P1!" o "¡GANÓ P2!" según el jugador que queda vivo, con las mismas opciones de siempre ("Jugar de nuevo (R)" y "Menú"). Derrota (mueren ambos): "¡DERROTA!" con el número de ronda. En 1 jugador los textos "¡VICTORIA!" / "¡DERROTA!" no cambian.
+- **RF-11.7 Bomba, Lucky Blocks y habilidades.** Las reglas de RF-05, RF-06 y RF-07 no cambian: solo quien lleva la bomba recoge Lucky Blocks y solo a él se le aplican los efectos. Mientras **cualquiera** de los dos humanos lleve la bomba, los Lucky Blocks se ven en el mapa y las habilidades activas se listan en pantalla para ambos (con prefijo `P1:`/`P2:`); el jugador sin bomba puede verlos pero **no recibe ningún buff**. Los efectos que marcan a los rivales (Radar) pueden marcar también al otro jugador.
+- **RF-11.8 Pausa y reinicio.** `Esc`/`P` y `R` funcionan igual en ambos modos; `R` reinicia en el mismo modo.
+
+**Aceptación**
+- Desde el menú se puede iniciar 1 jugador o 2 jugadores, y en 2 jugadores se ve la pantalla de controles de P1 y P2 antes de empezar.
+- P1 solo responde a W A S D / E; P2 solo a las flechas / Espacio.
+- Al separar o juntar a los jugadores, la cámara se aleja o acerca y ambos permanecen visibles; no hay pantalla dividida.
+- Tras morir un jugador, en la ronda siguiente la cámara sigue únicamente al superviviente.
+- Si mueren ambos: derrota con "Jugar de nuevo" y "Menú". Si queda uno sin bots: "¡GANÓ P1!" o "¡GANÓ P2!".
+- El jugador sin bomba nunca recibe un buff de un Lucky Block.
+- El modo de 1 jugador funciona exactamente como antes.
+
+Pruebas automatizadas: `tests/unit/test_two_players.gd` y los casos nuevos de `tests/unit/test_input_map.gd`.
+
+---
+
 ## Pendiente
 
 - Pruebas funcionales de la exportación Web en un navegador Chrome real y publicación.
+- Probar el modo 2 jugadores en una ventana real de Godot (la cámara y las pruebas GUT nuevas no se pudieron ejecutar al escribirlas) y en el navegador, incluido el ghosting de teclado cuando dos personas pulsan muchas teclas a la vez en un mismo teclado.
+- Confirmar con el equipo las decisiones marcadas **[asumido]** de RF-11 (p. ej., el desempate entre P1 y P2 cuando no quedan bots).
 - Balanceo de velocidad, bomba, probabilidades e IA con el equipo.
 - Reglamento de la jam (por ahora solo se entrega en GitHub).
 

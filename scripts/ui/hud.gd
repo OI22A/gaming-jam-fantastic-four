@@ -7,6 +7,8 @@ extends CanvasLayer
 ## Se construye por código para que no dependa de escenas .tscn.
 
 var _player: Character
+## Jugadores humanos (1 en modo normal, 2 en modo 2 jugadores).
+var _humans: Array[Character] = []
 var _effects: EffectManager
 var _bomb: BombManager
 var _characters_provider: Callable
@@ -21,6 +23,7 @@ var _result_box: CenterContainer
 var _result_title: Label
 var _result_detail: Label
 var _minimap: Minimap
+var _controls_hint: Label
 
 var _center_ttl := 0.0
 var _toast_ttl := 0.0
@@ -36,13 +39,21 @@ func setup(
 	effects: EffectManager,
 	bomb: BombManager,
 	game_map: GameMap,
-	characters_provider: Callable
+	characters_provider: Callable,
+	humans: Array = []
 ) -> void:
 	_player = player
+	_humans.clear()
+	if humans.is_empty():
+		_humans.append(player)
+	else:
+		for human in humans:
+			_humans.append(human as Character)
 	_effects = effects
 	_bomb = bomb
 	_characters_provider = characters_provider
 	_build_ui()
+	_controls_hint.visible = GameManager.two_players
 	_minimap.setup(game_map, characters_provider)
 	_minimap.visible = false
 	_minimap.z_index = 100
@@ -77,9 +88,12 @@ func _process(delta: float) -> void:
 	_minimap.queue_redraw()
 
 	var lines: PackedStringArray = []
-	for effect in _effects.get_active_for(_player):
-		var data: Dictionary = effect
-		lines.append("%s  %.1f s" % [data.label, maxf(0.0, float(data.remaining))])
+	var show_owner := _humans.size() > 1
+	for human in _humans:
+		for effect in _effects.get_active_for(human):
+			var data: Dictionary = effect
+			var owner_prefix := "%s: " % human.display_name if show_owner else ""
+			lines.append("%s%s  %.1f s" % [owner_prefix, data.label, maxf(0.0, float(data.remaining))])
 	_effects_label.text = "\n".join(lines)
 
 	if _center_ttl > 0.0:
@@ -139,6 +153,16 @@ func _build_ui() -> void:
 	_toast_label.offset_bottom = -50.0
 	_toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(_toast_label)
+
+	_controls_hint = _make_label(15)
+	_controls_hint.text = "P1: WASD + E (atajo)      P2: Flechas + Espacio (atajo)"
+	_controls_hint.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	_controls_hint.offset_top = -36.0
+	_controls_hint.offset_bottom = -8.0
+	_controls_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_controls_hint.modulate = Color(1.0, 1.0, 1.0, 0.75)
+	_controls_hint.visible = false
+	root.add_child(_controls_hint)
 
 	_result_box = CenterContainer.new()
 	_result_box.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -224,14 +248,27 @@ func _on_lucky_block_collected(collector: Node, reward: Dictionary) -> void:
 
 
 func _on_match_ended(player_won: bool) -> void:
-	_result_title.text = "¡VICTORIA!" if player_won else "¡DERROTA!"
-	_result_detail.text = (
-		"Eres el último en pie."
-		if player_won
-		else "La bomba explotó en tus manos (ronda %d)." % GameManager.round_number
+	var texts := build_result_texts(
+		player_won, GameManager.two_players, GameManager.winner_label, GameManager.round_number
 	)
+	_result_title.text = texts[0]
+	_result_detail.text = texts[1]
 	_result_box.visible = true
 	_update_minimap_visibility()
+
+
+## Textos de la pantalla final: [título, detalle]. Público y estático para poder probarlo.
+## En 2 jugadores la victoria dice qué jugador ganó ("¡GANÓ P1!" / "¡GANÓ P2!").
+static func build_result_texts(
+	player_won: bool, two_players: bool, winner_label: String, round_number: int
+) -> Array[String]:
+	if two_players:
+		if player_won and winner_label != "":
+			return ["¡GANÓ %s!" % winner_label, "%s es el último en pie." % winner_label]
+		return ["¡DERROTA!", "Ambos jugadores fueron eliminados (ronda %d)." % round_number]
+	if player_won:
+		return ["¡VICTORIA!", "Eres el último en pie."]
+	return ["¡DERROTA!", "La bomba explotó en tus manos (ronda %d)." % round_number]
 
 
 func _on_effect_applied(_target: Node, _effect_id: String, _duration: float) -> void:
@@ -249,4 +286,8 @@ func _on_bomb_transferred(_from: Node, _to: Node) -> void:
 func _update_minimap_visibility() -> void:
 	if _minimap == null or _player == null or _effects == null:
 		return
-	_minimap.visible = _player.has_bomb and _effects.has_tracking(_player)
+	var show_minimap := false
+	for human in _humans:
+		if human.has_bomb and _effects.has_tracking(human):
+			show_minimap = true
+	_minimap.visible = show_minimap

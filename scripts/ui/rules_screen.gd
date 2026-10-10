@@ -31,6 +31,10 @@ const REWARD_HINTS := {
 	"golden_transfer": "la bomba pasa a otro jugador al azar",
 }
 
+## Si es true muestra la versión del modo 2 jugadores (controles de P1 y P2).
+## Debe asignarse antes de añadir la pantalla al árbol.
+var two_players := false
+
 var confirm_button: Button
 var back_button: Button
 
@@ -66,7 +70,7 @@ func _ready() -> void:
 	panel.add_child(box)
 
 	var title := Label.new()
-	title.text = "CÓMO SE JUEGA"
+	title.text = "CÓMO SE JUEGA · 2 JUGADORES" if two_players else "CÓMO SE JUEGA"
 	title.add_theme_font_size_override("font_size", 38)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
@@ -74,9 +78,9 @@ func _ready() -> void:
 	var columns := HBoxContainer.new()
 	columns.add_theme_constant_override("separation", 22)
 	box.add_child(columns)
-	columns.add_child(_make_column(build_left_text()))
-	columns.add_child(_make_column(build_middle_text()))
-	columns.add_child(_make_column(build_right_text()))
+	columns.add_child(_make_column(build_left_text(two_players)))
+	columns.add_child(_make_column(build_middle_text(two_players)))
+	columns.add_child(_make_column(build_right_text(two_players)))
 
 	var buttons := HBoxContainer.new()
 	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -136,7 +140,7 @@ func _make_column(bbcode: String) -> RichTextLabel:
 
 
 ## Columna izquierda: objetivo y bomba.
-static func build_left_text() -> String:
+static func build_left_text(two_players: bool = false) -> String:
 	var round_defaults := MatchController.new()
 	var bomb_defaults := BombManager.new()
 	var countdown := round_defaults.countdown_seconds
@@ -147,7 +151,11 @@ static func build_left_text() -> String:
 	var lines := PackedStringArray()
 	lines.append(_heading("OBJETIVO"))
 	lines.append("• Quien lleva la bomba es el impostor: si el contador llega a 0, explota y queda eliminado.")
-	lines.append("• Ganas si todos los bots son eliminados. Pierdes si la bomba te explota a ti: la partida termina al instante.")
+	if two_players:
+		lines.append("• Es una sola pantalla: la cámara enfoca el punto medio entre P1 y P2 y se aleja si se separan.")
+		lines.append("• Gana el último jugador en pie (\"Ganó P1\" o \"Ganó P2\"). Si uno es eliminado, el otro sigue solo. Si mueren los dos, pierden.")
+	else:
+		lines.append("• Ganas si todos los bots son eliminados. Pierdes si la bomba te explota a ti: la partida termina al instante.")
 	lines.append("")
 	lines.append(_heading("LA BOMBA"))
 	lines.append(
@@ -165,19 +173,25 @@ static func build_left_text() -> String:
 
 
 ## Columna central: controles y atajos.
-static func build_middle_text() -> String:
+static func build_middle_text(two_players: bool = false) -> String:
 	var map_defaults := GameMap.new()
 	var crossing := map_defaults.shortcut_use_seconds
 	map_defaults.free()
 	var lines := PackedStringArray()
 	lines.append(_heading("CONTROLES"))
-	lines.append("• Mover: [b]WASD[/b] o [b]flechas[/b]")
-	lines.append("• Usar atajo: [b]E[/b] o [b]Espacio[/b]")
+	if two_players:
+		lines.append("• [color=#4099ff][b]JUGADOR 1 (P1)[/b][/color]: mover con [b]W A S D[/b]  ·  atajo con [b]E[/b]")
+		lines.append("• [color=#26d9d9][b]JUGADOR 2 (P2)[/b][/color]: mover con las [b]flechas[/b]  ·  atajo con [b]Espacio[/b]")
+	else:
+		lines.append("• Mover: [b]WASD[/b] o [b]flechas[/b]")
+		lines.append("• Usar atajo: [b]E[/b] o [b]Espacio[/b]")
 	lines.append("• Pausa: [b]Esc[/b]   ·   Reiniciar: [b]R[/b]")
 	lines.append("")
 	lines.append(_heading("ATAJOS (solo si NO llevas la bomba)"))
 	lines.append(
 		"• Acércate a la [color=#ffc740][b]ENTRADA[/b][/color] (círculo amarillo) y pulsa [b]E[/b] o [b]Espacio[/b]. Estar encima no basta."
+		if not two_players
+		else "• Acércate a la [color=#ffc740][b]ENTRADA[/b][/color] (círculo amarillo) y pulsa tu tecla de atajo: [b]E[/b] (P1) o [b]Espacio[/b] (P2). Estar encima no basta."
 	)
 	lines.append(
 		"• El cruce es automático y dura %s s: no puedes moverte ni pasar o recibir la bomba. Sales por la [color=#66e6ff][b]SALIDA[/b][/color] (celeste)."
@@ -191,7 +205,7 @@ static func build_middle_text() -> String:
 
 
 ## Columna derecha: Lucky Blocks.
-static func build_right_text() -> String:
+static func build_right_text(two_players: bool = false) -> String:
 	var spawner_defaults := LuckyBlockSpawner.new()
 	var max_blocks := spawner_defaults.max_active_blocks
 	var respawn := spawner_defaults.respawn_delay
@@ -205,6 +219,8 @@ static func build_right_text() -> String:
 	lines.append("• El color indica la probabilidad de lo que dan:")
 	lines.append_array(_reward_lines())
 	lines.append("• Los efectos temporales se pierden al pasar la bomba.")
+	if two_players:
+		lines.append("• En 2 jugadores ambos ven los Lucky Blocks y las habilidades mientras uno de los dos tenga la bomba, pero los efectos solo se aplican a quien la lleva.")
 	return "\n".join(lines)
 
 
