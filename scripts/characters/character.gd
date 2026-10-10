@@ -10,6 +10,9 @@ extends CharacterBody2D
 ## expirar. Así nunca se "pierde" la velocidad original.
 
 const BODY_RADIUS := 14.0
+## Se precarga por ruta (en vez de usar el class_name) para que el juego arranque aunque
+## Godot aún no haya registrado la clase nueva (p. ej. al ejecutar sin abrir el editor).
+const SpriteScript := preload("res://scripts/characters/character_sprite.gd")
 
 @export var display_name := "Personaje"
 @export var base_speed := 230.0
@@ -25,6 +28,7 @@ var has_bomb := false:
 var is_eliminated := false
 var is_using_shortcut := false
 var game_map: GameMap
+var _sprite: AnimatedSprite2D
 var _transfer_flash_left := 0.0
 ## effect_id -> multiplicador de velocidad (>=1, solo mejoras).
 var speed_modifiers: Dictionary = {}
@@ -47,7 +51,14 @@ func _ready() -> void:
 		circle.radius = BODY_RADIUS
 		shape.shape = circle
 		add_child(shape)
+	_sprite = SpriteScript.new()
+	add_child(_sprite)
 	GameEvents.bomb_transferred.connect(_on_bomb_transferred)
+
+
+## Los bots lo sobrescriben: indica si entran solos a un atajo cercano.
+func can_auto_use_shortcut() -> bool:
+	return false
 
 
 func _on_bomb_transferred(_from: Node, to: Node) -> void:
@@ -65,7 +76,7 @@ func _physics_process(_delta: float) -> void:
 		velocity = Vector2.ZERO
 		return
 	if not has_bomb and game_map != null:
-		var use_automatically := self is BotCharacter
+		var use_automatically := can_auto_use_shortcut()
 		if use_automatically or (self is PlayerCharacter and Input.is_action_just_pressed("shortcut")):
 			if game_map.try_use_shortcut(self):
 				return
@@ -74,6 +85,9 @@ func _physics_process(_delta: float) -> void:
 
 
 func _process(_delta: float) -> void:
+	if _sprite != null:
+		# Parpadeo al recibir la bomba (el sprite es un nodo hijo, no parte de _draw).
+		_sprite.visible = not (_transfer_flash_left > 0.0 and int(_transfer_flash_left * 12.0) % 2 == 0)
 	queue_redraw()
 
 
@@ -106,10 +120,12 @@ func _draw() -> void:
 		return
 	if is_marked():
 		draw_arc(Vector2.ZERO, BODY_RADIUS + 8.0, 0.0, TAU, 32, Color(1.0, 0.9, 0.2), 3.0)
-	draw_circle(Vector2.ZERO, BODY_RADIUS, body_color)
-	draw_arc(Vector2.ZERO, BODY_RADIUS, 0.0, TAU, 24, Color(0.0, 0.0, 0.0, 0.6), 2.0)
+	# Sombra bajo los pies; el cuerpo lo dibuja CharacterSprite.
+	draw_set_transform(Vector2(0.0, BODY_RADIUS - 3.0), 0.0, Vector2(1.0, 0.45))
+	draw_circle(Vector2.ZERO, BODY_RADIUS * 0.9, Color(0.0, 0.0, 0.0, 0.3))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	if has_bomb:
-		var bomb_pos := Vector2(0.0, -BODY_RADIUS - 14.0)
+		var bomb_pos := Vector2(0.0, -BODY_RADIUS - 24.0)
 		draw_circle(bomb_pos, 9.0, Color(0.1, 0.1, 0.1))
 		draw_line(
 			bomb_pos + Vector2(3.0, -8.0),
@@ -121,7 +137,7 @@ func _draw() -> void:
 	var font := ThemeDB.fallback_font
 	draw_string(
 		font,
-		Vector2(-50.0, BODY_RADIUS + 18.0),
+		Vector2(-50.0, BODY_RADIUS + 20.0),
 		display_name,
 		HORIZONTAL_ALIGNMENT_CENTER,
 		100.0,

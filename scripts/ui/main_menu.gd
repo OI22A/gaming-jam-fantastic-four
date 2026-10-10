@@ -1,6 +1,6 @@
 class_name MainMenu
 extends CanvasLayer
-## Menú principal: elegir mapa y número de bots. Iniciar con GameManager.
+## Menú principal: elegir número de bots e iniciar la partida con GameManager.
 
 
 func _ready() -> void:
@@ -57,12 +57,11 @@ func _ready() -> void:
 	bots_spin.value_changed.connect(func(v: float) -> void: GameManager.bot_count = int(v))
 	bots_row.add_child(bots_spin)
 
-	for map_id in GameManager.MAPS:
-		var button := Button.new()
-		button.text = "Jugar en: %s" % GameManager.MAPS[map_id].name
-		button.custom_minimum_size = Vector2(320.0, 48.0)
-		button.pressed.connect(GameManager.start_match.bind(map_id))
-		box.add_child(button)
+	var play_button := Button.new()
+	play_button.text = "Jugar"
+	play_button.custom_minimum_size = Vector2(320.0, 48.0)
+	play_button.pressed.connect(GameManager.start_match.bind(GameManager.DEFAULT_MAP_ID))
+	box.add_child(play_button)
 
 	var help := Label.new()
 	help.text = (

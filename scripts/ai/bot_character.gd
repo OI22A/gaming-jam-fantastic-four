@@ -13,6 +13,8 @@ extends Character
 enum Mode { WANDER, CHASE, FLEE, SEEK_BLOCK }
 
 const AVOID_ANGLES := [0.0, 0.6, -0.6, 1.2, -1.2, 1.9, -1.9]
+## Tras usar un atajo, el bot lo ignora durante este tiempo (huye a pie).
+const SHORTCUT_COOLDOWN := 9.0
 
 @export var decision_interval := 0.25
 @export var ray_length := 60.0
@@ -27,6 +29,7 @@ var _timer := 0.0
 var _last_position := Vector2.ZERO
 var _rng := RandomNumberGenerator.new()
 var _navigation: NavigationAgent2D
+var _shortcut_cooldown := 0.0
 
 
 func _init() -> void:
@@ -48,6 +51,23 @@ func _ready() -> void:
 	_navigation.radius = BODY_RADIUS
 	add_child(_navigation)
 	GameEvents.bomb_transferred.connect(_on_role_changed)
+
+
+func _physics_process(delta: float) -> void:
+	_shortcut_cooldown = maxf(0.0, _shortcut_cooldown - delta)
+	var was_using := is_using_shortcut
+	super._physics_process(delta)
+	if is_using_shortcut and not was_using:
+		mark_shortcut_used()
+
+
+## Solo usa atajos para huir del portador y cuando ya pasó el enfriamiento.
+func can_auto_use_shortcut() -> bool:
+	return mode == Mode.FLEE and _shortcut_cooldown <= 0.0
+
+
+func mark_shortcut_used() -> void:
+	_shortcut_cooldown = SHORTCUT_COOLDOWN
 
 
 func _on_role_changed(_from: Node, _to: Node) -> void:
@@ -109,8 +129,10 @@ func _decide() -> void:
 		var holder := _find_holder(others)
 		if holder != null:
 			mode = Mode.FLEE
-			if game_map != null:
-				var escape_entry := game_map.escape_shortcut_entry(global_position, holder.global_position)
+			if game_map != null and _shortcut_cooldown <= 0.0:
+				var escape_entry := game_map.escape_shortcut_entry(
+					global_position, holder.global_position, self
+				)
 				if escape_entry != Vector2.ZERO:
 					_goal = escape_entry
 					_desired = _direction_to(_goal)
