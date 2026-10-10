@@ -90,6 +90,48 @@ func test_camera_centers_on_midpoint_of_both_players() -> void:
 	assert_eq(cam.global_position, Vector2(800, 700))
 
 
+func test_camera_has_no_map_limits() -> void:
+	var cam: DualCamera = match_node.camera
+	var bounds := match_node.map.get_bounds()
+	assert_lt(cam.limit_left, int(bounds.position.x), "Sin límite izquierdo.")
+	assert_lt(cam.limit_top, int(bounds.position.y), "Sin límite superior.")
+	assert_gt(cam.limit_right, int(bounds.end.x), "Sin límite derecho.")
+	assert_gt(cam.limit_bottom, int(bounds.end.y), "Sin límite inferior.")
+
+
+func test_players_in_opposite_corners_both_fit_on_screen() -> void:
+	var bounds := match_node.map.get_bounds()
+	var near := Vector2.ONE * Character.BODY_RADIUS
+	# El jugador no puede pasar de las paredes del borde: su centro queda a >= BODY_RADIUS.
+	_assert_both_visible(bounds.position + near, bounds.end - near)
+	_assert_both_visible(
+		Vector2(bounds.position.x + near.x, bounds.end.y - near.y),
+		Vector2(bounds.end.x - near.x, bounds.position.y + near.y)
+	)
+
+
+func _assert_both_visible(a: Vector2, b: Vector2) -> void:
+	var cam: DualCamera = match_node.camera
+	var view := Vector2(1280.0, 720.0)
+	var rect := Rect2(a, Vector2.ZERO).expand(b)
+	var wanted := cam.zoom_for_rect(rect, view)
+	# Pantalla menos el margen de la cámara: cada jugador debe quedar dentro de esa zona.
+	var safe_area := Rect2(Vector2.ZERO, view).grow(-(cam.margin * wanted) + 0.5)
+	for point in [a, b]:
+		var on_screen: Vector2 = (point - rect.get_center()) * wanted + view * 0.5
+		assert_true(
+			safe_area.has_point(on_screen),
+			"%s queda fuera de la pantalla (zoom %.3f)" % [point, wanted]
+		)
+
+
+func test_map_covers_outside_of_bounds_with_black() -> void:
+	var mask = match_node.map.get_node_or_null("OutsideMask")
+	assert_not_null(mask, "El mapa cubre de negro lo que queda fuera de sus límites.")
+	if mask != null:
+		assert_eq(mask.bounds, match_node.map.get_bounds())
+
+
 func test_dead_player_is_dropped_from_camera_on_next_round() -> void:
 	await _start_round()
 	var p1 := match_node.players[0]

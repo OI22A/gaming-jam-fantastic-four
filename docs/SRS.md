@@ -325,7 +325,7 @@ Modo local para dos personas en el mismo teclado y **la misma pantalla** (no hay
 
   Las acciones del modo 1 jugador (`move_*`, `shortcut`) se conservan sin cambios.
 - **RF-11.3 Pantalla emergente de controles.** Antes de empezar, la pantalla de reglas (título "CÓMO SE JUEGA · 2 JUGADORES") indica: P1 se mueve con W A S D y usa los atajos con E; P2 se mueve con las flechas y usa los atajos con Espacio. También explica la cámara compartida y la condición de victoria. "Volver" o `Esc` cancelan sin iniciar la partida.
-- **RF-11.4 Cámara compartida (`DualCamera`).** Una única cámara se centra en el **punto medio** de los jugadores enfocados y ajusta el zoom para que todos aparezcan siempre (con un margen de 220 px **[param]**): si se separan se aleja, si se juntan se acerca hasta el zoom normal (1.0). El zoom mínimo es el que muestra el mapa completo, y la cámara respeta los límites del mapa. El suavizado de posición y de zoom depende de `delta`, no de frames.
+- **RF-11.4 Cámara compartida (`DualCamera`).** Una única cámara se centra en el **punto medio** de los jugadores enfocados y ajusta el zoom para que todos aparezcan siempre (con un margen de 220 px **[param]**): si se separan se aleja, si se juntan se acerca hasta el zoom normal (1.0). La cámara **no tiene límites de mapa**: el zoom mínimo es el que muestra el mapa completo **más el margen**, de modo que con los jugadores en esquinas opuestas ambos siguen en pantalla. Todo lo que queda fuera de los bordes del mapa se ve **negro** (`TiledMap.OutsideMask`); los jugadores no pueden salir porque el mapa tiene paredes perimetrales. El suavizado de posición y de zoom depende de `delta`, no de frames.
 - **RF-11.5 Muerte y fin de partida.**
   - Si un jugador muere y el otro sigue vivo, la partida continúa. La cámara pasa a enfocar **solo al jugador vivo a partir de la siguiente ronda** (durante el `ROUND_END` aún se ve la explosión).
   - Si mueren los dos, la partida termina como siempre (`ENDED`, derrota) con las mismas opciones: jugar de nuevo y menú.
@@ -338,6 +338,7 @@ Modo local para dos personas en el mismo teclado y **la misma pantalla** (no hay
 - Desde el menú se puede iniciar 1 jugador o 2 jugadores, y en 2 jugadores se ve la pantalla de controles de P1 y P2 antes de empezar.
 - P1 solo responde a W A S D / E; P2 solo a las flechas / Espacio.
 - Al separar o juntar a los jugadores, la cámara se aleja o acerca y ambos permanecen visibles; no hay pantalla dividida.
+- Con P1 y P2 en esquinas opuestas del mapa, la cámara se aleja lo necesario y ambos permanecen visibles; lo que queda fuera del mapa se ve negro y los jugadores no pueden salir de él.
 - Tras morir un jugador, en la ronda siguiente la cámara sigue únicamente al superviviente.
 - Si mueren ambos: derrota con "Jugar de nuevo" y "Menú". Si queda uno sin bots: "¡GANÓ P1!" o "¡GANÓ P2!".
 - El jugador sin bomba nunca recibe un buff de un Lucky Block.

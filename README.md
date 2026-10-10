@@ -186,7 +186,7 @@ Notas importantes:
 
 ### Modo 2 jugadores
 
-Misma pantalla, sin dividirla: la cámara se centra entre P1 y P2 y se aleja o acerca para que ambos se vean siempre.
+Misma pantalla, sin dividirla: la cámara se centra entre P1 y P2 y se aleja o acerca para que ambos se vean siempre, incluso en esquinas opuestas del mapa (lo que queda fuera del mapa se ve negro).
 
 | Jugador | Mover | Atajo |
 |---|---|---|
