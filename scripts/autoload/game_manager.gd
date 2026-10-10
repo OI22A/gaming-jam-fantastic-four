@@ -4,7 +4,7 @@ extends Node
 ## Responsabilidades:
 ## - Mantener la máquina de estados de la partida.
 ## - Iniciar, pausar, reiniciar y terminar partidas.
-## - Guardar la configuración elegida en el menú (mapa y número de bots).
+## - Guardar la configuración elegida en el menú (número de bots).
 ##
 ## La construcción de la escena de juego la hace Main (reacciona a
 ## `GameEvents.match_requested`); el desarrollo de las rondas lo hace
@@ -12,15 +12,16 @@ extends Node
 
 enum State { MENU, COUNTDOWN, PLAYING, ROUND_END, ENDED, PAUSED }
 
+## Único mapa jugable: el mapa de Tiled (assets/map/mapa.tmx).
+const DEFAULT_MAP_ID := "tiled"
 const MAPS := {
-	"park": {"name": "Parque Central", "scene": "res://scenes/maps/park_map.tscn"},
-	"city": {"name": "Calles del Centro", "scene": "res://scenes/maps/city_map.tscn"},
+	"tiled": {"name": "Mapa del Barrio", "scene": "res://scenes/maps/tiled_map.tscn"},
 }
 const MIN_BOTS := 1
 const MAX_BOTS := 5
 
 var state: State = State.MENU
-var current_map_id := "park"
+var current_map_id := DEFAULT_MAP_ID
 var round_number := 0
 var player_won := false
 var bot_count := 3

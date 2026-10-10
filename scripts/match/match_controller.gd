@@ -22,7 +22,7 @@ const BOT_COLORS := [
 	Color(0.95, 0.55, 0.8),
 ]
 
-@export var map_id := "park"
+@export var map_id := GameManager.DEFAULT_MAP_ID
 @export var countdown_seconds := 3
 @export var round_end_delay := 2.0
 @export var bomb_duration := 60.0
@@ -85,7 +85,7 @@ func debug_skip_countdown() -> void:
 
 
 func _build_map() -> void:
-	var info: Dictionary = GameManager.MAPS.get(map_id, GameManager.MAPS["park"])
+	var info: Dictionary = GameManager.MAPS.get(map_id, GameManager.MAPS[GameManager.DEFAULT_MAP_ID])
 	var scene: PackedScene = load(info.scene)
 	map = scene.instantiate() as GameMap
 	add_child(map)

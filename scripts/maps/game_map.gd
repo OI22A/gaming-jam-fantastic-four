@@ -1,7 +1,7 @@
 class_name GameMap
 extends Node2D
-## Mapa base (RF-02). Los mapas concretos (ParkMap, CityMap) sobrescriben
-## `_define_layout()` y registran obstáculos, puntos de aparición y puntos de
+## Mapa base (RF-02). El mapa concreto (TiledMap) sobrescribe
+## `_define_layout()` y registra obstáculos, puntos de aparición y puntos de
 ## Lucky Blocks. La colisión y el dibujo se generan automáticamente a partir de
 ## esos datos, así que no se necesitan arte ni TileMaps para jugar.
 ##
@@ -11,6 +11,12 @@ extends Node2D
 const WALL_THICKNESS := 200.0
 const LAYOUT_SCALE := 1.25
 const SHORTCUT_INTERACTION_RADIUS := 56.0
+## Un bot solo huye por un atajo si su entrada está a esta distancia o menos...
+const SHORTCUT_ESCAPE_MAX_DISTANCE := 550.0
+## ...y claramente más cerca de él que del portador (fracción de la distancia del portador).
+const SHORTCUT_ESCAPE_CLOSER_RATIO := 0.8
+## Un bot que se dirige a una entrada la reserva este tiempo (se renueva al decidir).
+const SHORTCUT_CLAIM_MSEC := 1000
 const SHORTCUT_WIDTH := 96.0
 const SHORTCUT_GATE_DEPTH := 34.0
 const SHORTCUT_WALL_THICKNESS := 12.0
@@ -20,6 +26,10 @@ const SHORTCUT_NAV_MARGIN := 4.0
 @export var map_id := "map"
 @export var display_name := "Mapa"
 @export var map_size := Vector2(2400.0, 1350.0)
+## Escala aplicada a obstáculos y puntos; con `scale_to_default_size` también fija
+## `map_size` a 1920x1080 por esa escala. TiledMap usa 1.0 y conserva su tamaño real.
+var layout_scale := LAYOUT_SCALE
+var scale_to_default_size := true
 @export var shortcut_use_seconds := 3.2
 @export var ground_color := Color(0.35, 0.6, 0.3)
 
@@ -30,6 +40,9 @@ var lucky_block_points: Array[Vector2] = []
 ## Cada atajo tiene una entrada interactiva, una salida y un corredor cerrado.
 var shortcuts: Array[Dictionary] = []
 var _shortcut_busy: Array[bool] = []
+## índice del atajo -> {"node": Node, "until": int (ms)}: evita que varios bots se
+## amontonen en la misma entrada.
+var _shortcut_claims: Dictionary = {}
 
 
 func _ready() -> void:
@@ -49,27 +62,35 @@ func add_obstacle(rect: Rect2, kind: String = "block", color: Color = Color(0.5,
 	obstacles.append({"rect": rect, "kind": kind, "color": color})
 
 
-func add_shortcut(entry: Vector2, exit: Vector2) -> void:
-	shortcuts.append({"entry": entry, "exit": exit})
+## Registra un atajo de un solo sentido (entrada -> salida). Sin `barriers` se genera el
+## corredor cerrado de 96 px; con `barriers` (rectángulos que cierran las puertas de una
+## zona que el mapa ya encierra con sus propias colisiones) solo se crean esas barreras.
+func add_shortcut(entry: Vector2, exit: Vector2, barriers: Array[Rect2] = []) -> void:
+	shortcuts.append({"entry": entry, "exit": exit, "barriers": barriers})
 
 
 func _scale_layout() -> void:
-	map_size = Vector2(1920.0, 1080.0) * LAYOUT_SCALE
+	if scale_to_default_size:
+		map_size = Vector2(1920.0, 1080.0) * layout_scale
 	for i in obstacles.size():
 		var obstacle: Dictionary = obstacles[i]
 		var rect: Rect2 = obstacle.rect
-		obstacle.rect = Rect2(rect.position * LAYOUT_SCALE, rect.size * LAYOUT_SCALE)
+		obstacle.rect = Rect2(rect.position * layout_scale, rect.size * layout_scale)
 		obstacles[i] = obstacle
 	for i in spawn_points.size():
-		spawn_points[i] = spawn_points[i] * LAYOUT_SCALE
+		spawn_points[i] = spawn_points[i] * layout_scale
 	for i in lucky_block_points.size():
-		lucky_block_points[i] = lucky_block_points[i] * LAYOUT_SCALE
+		lucky_block_points[i] = lucky_block_points[i] * layout_scale
 	for i in shortcuts.size():
 		var route: Dictionary = shortcuts[i]
 		var entry: Vector2 = route.entry
 		var exit: Vector2 = route.exit
-		route.entry = entry * LAYOUT_SCALE
-		route.exit = exit * LAYOUT_SCALE
+		route.entry = entry * layout_scale
+		route.exit = exit * layout_scale
+		var scaled_barriers: Array[Rect2] = []
+		for barrier: Rect2 in route.barriers:
+			scaled_barriers.append(Rect2(barrier.position * layout_scale, barrier.size * layout_scale))
+		route.barriers = scaled_barriers
 		shortcuts[i] = route
 		_shortcut_busy.append(false)
 
@@ -98,15 +119,29 @@ func _make_navigation_polygon(block_shortcuts: bool) -> NavigationPolygon:
 		)
 	)
 	for obstacle in obstacles:
-		var rect: Rect2 = obstacle.rect.grow(Character.BODY_RADIUS + 8.0)
+		var rect: Rect2 = _snap_outward(obstacle.rect.grow(Character.BODY_RADIUS + 8.0))
 		source.add_obstruction_outline(_rect_outline(rect))
 	if block_shortcuts:
 		for route in shortcuts:
-			source.add_obstruction_outline(_shortcut_nav_outline(route.entry, route.exit))
+			if route.barriers.is_empty():
+				source.add_obstruction_outline(_shortcut_nav_outline(route.entry, route.exit))
+			else:
+				for barrier: Rect2 in route.barriers:
+					var closed := _snap_outward(barrier.grow(Character.BODY_RADIUS + 8.0))
+					source.add_obstruction_outline(_rect_outline(closed))
 	var polygon := NavigationPolygon.new()
 	polygon.agent_radius = 0.0  # Los huecos ya incluyen el radio del cuerpo.
 	NavigationServer2D.bake_from_source_geometry_data(polygon, source)
 	return polygon
+
+
+## Redondea el rectángulo hacia afuera a píxeles enteros. Con coordenadas decimales
+## (como las de Tiled) cientos de huecos solapados generan aristas casi coincidentes
+## y el mapa de navegación avisa de aristas ya fusionadas.
+func _snap_outward(rect: Rect2) -> Rect2:
+	var start := rect.position.floor()
+	var end := rect.end.ceil()
+	return Rect2(start, end - start)
 
 
 func _rect_outline(rect: Rect2) -> PackedVector2Array:
@@ -205,17 +240,50 @@ func nearest_shortcut_entry(from: Vector2) -> Vector2:
 	return best
 
 
-func escape_shortcut_entry(from: Vector2, threat: Vector2) -> Vector2:
+## Entrada de atajo a la que un bot puede huir de `threat`, o Vector2.ZERO si conviene
+## huir a pie. Se descartan los atajos ocupados, los reservados por otro bot, los lejanos
+## y aquellos cuya entrada no esté claramente más cerca del bot que del portador.
+func escape_shortcut_entry(from: Vector2, threat: Vector2, requester: Node = null) -> Vector2:
 	var best := Vector2.ZERO
+	var best_index := -1
 	var best_score := -INF
-	for route in shortcuts:
+	for index in shortcuts.size():
+		if _shortcut_busy[index] or not _is_claim_available(index, requester):
+			continue
+		var route: Dictionary = shortcuts[index]
 		var entry: Vector2 = route.entry
 		var exit: Vector2 = route.exit
-		var score := exit.distance_to(threat) - from.distance_to(entry)
+		var own_distance := from.distance_to(entry)
+		if (
+			own_distance > SHORTCUT_ESCAPE_MAX_DISTANCE
+			or own_distance > threat.distance_to(entry) * SHORTCUT_ESCAPE_CLOSER_RATIO
+		):
+			continue
+		var score := exit.distance_to(threat) - own_distance
 		if score > best_score:
 			best_score = score
 			best = entry
+			best_index = index
+	if best_index >= 0 and requester != null:
+		_shortcut_claims[best_index] = {
+			"node": requester, "until": Time.get_ticks_msec() + SHORTCUT_CLAIM_MSEC
+		}
 	return best
+
+
+func _is_claim_available(index: int, requester: Node) -> bool:
+	if not _shortcut_claims.has(index):
+		return true
+	var claim: Dictionary = _shortcut_claims[index]
+	var owner: Object = claim.node
+	if (
+		owner == requester
+		or not is_instance_valid(owner)
+		or Time.get_ticks_msec() > int(claim.until)
+	):
+		return true
+	var character := owner as Character
+	return character != null and (character.is_eliminated or character.has_bomb)
 
 
 func get_bounds() -> Rect2:
@@ -251,7 +319,11 @@ func _build_collision() -> void:
 	shortcut_barriers.collision_mask = 0
 	add_child(shortcut_barriers)
 	for route in shortcuts:
-		_add_shortcut_walls(shortcut_barriers, route.entry, route.exit)
+		if route.barriers.is_empty():
+			_add_shortcut_walls(shortcut_barriers, route.entry, route.exit)
+		else:
+			for barrier: Rect2 in route.barriers:
+				_add_rect_shape(shortcut_barriers, barrier)
 	var b := get_bounds()
 	var t := WALL_THICKNESS
 	_add_rect_shape(body, Rect2(b.position.x - t, b.position.y - t, b.size.x + 2.0 * t, t))

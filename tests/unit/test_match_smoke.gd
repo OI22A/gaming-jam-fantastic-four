@@ -10,7 +10,7 @@ func before_each() -> void:
 	GameManager.bot_count = 2
 	GameManager.set_state(GameManager.State.COUNTDOWN)
 	match_node = MatchController.new()
-	match_node.map_id = "park"
+	match_node.map_id = "tiled"
 	add_child_autofree(match_node)
 	await get_tree().process_frame
 

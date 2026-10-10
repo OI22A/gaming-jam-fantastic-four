@@ -16,16 +16,16 @@ func test_initial_state_is_menu() -> void:
 
 func test_start_match_requests_match_and_enters_countdown() -> void:
 	watch_signals(GameEvents)
-	GameManager.start_match("city")
-	assert_eq(GameManager.current_map_id, "city")
+	GameManager.start_match("tiled")
+	assert_eq(GameManager.current_map_id, "tiled")
 	assert_eq(GameManager.state, GameManager.State.COUNTDOWN)
-	assert_signal_emitted_with_parameters(GameEvents, "match_requested", ["city"])
+	assert_signal_emitted_with_parameters(GameEvents, "match_requested", ["tiled"])
 
 
 func test_invalid_map_keeps_current_map() -> void:
-	GameManager.current_map_id = "park"
+	GameManager.current_map_id = "tiled"
 	GameManager.start_match("no_existe")
-	assert_eq(GameManager.current_map_id, "park")
+	assert_eq(GameManager.current_map_id, "tiled")
 
 
 func test_pause_and_resume() -> void:
@@ -52,7 +52,7 @@ func test_end_match_stores_result_and_emits() -> void:
 
 
 func test_restart_resets_round_counter() -> void:
-	GameManager.start_match("park")
+	GameManager.start_match("tiled")
 	GameManager.round_number = 4
 	GameManager.restart_match()
 	assert_eq(GameManager.round_number, 0)
