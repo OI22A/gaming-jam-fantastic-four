@@ -9,7 +9,6 @@ Los valores marcados **[param]** son valores de partida ajustables, no decisione
 
 | Constante | Valor |
 |---|---|
-| `NUM_JUGADORES` | 10 |
 | `TIEMPO_BOMBA` | 60 s |
 | `COOLDOWN_TRANSFERENCIA` | 1.5 s [param] |
 | `DURACION_EFECTO` | 10 s [param] |
