@@ -28,7 +28,7 @@ Los valores marcados **[param]** son valores de partida ajustables, no decisione
 | `countdown_tick(seconds_left)` / `round_started(round_number, holder)` / `character_eliminated(character)` | MatchController |
 | `bomb_time_changed(time_left, duration)` / `bomb_transferred(from_holder, to_holder)` / `bomb_exploded(holder)` | BombManager |
 | `lucky_block_collected(collector, reward)` | LuckyBlockSpawner |
-| `effect_applied(target, effect_id, duration)` / `effect_expired(target, effect_id)` | EffectManager |
+| `effect_applied(target, effect_id, duration)` / `effect_expired(target, effect_id, reason)` | EffectManager |
 | `bomb_time_bonus_requested(seconds)` / `bomb_transfer_random_requested` | EffectManager |
 | `sfx_requested(sfx_name)` | Cualquier módulo |
 
@@ -80,7 +80,7 @@ Base compartida (`CharacterBody2D`) para el humano y el número de bots configur
 - **RF-03.2** Humano y bots usan la misma escena y velocidad base (230 px/s). Solo cambia la fuente de dirección (teclado o IA).
 - **RF-03.3** Los jugadores colisionan con los obstáculos del mapa y no los atraviesan.
 - **RF-03.4** Al escuchar `bomb_transferred`, se actualiza el rol y la capacidad de usar atajos. El portador no puede activarlos.
-- **RF-03.5** El humano no portador debe pulsar E o Espacio al estar junto a la entrada marcada; estar encima no activa el atajo. Los bots conservan su activación automática al alcanzar esa entrada. Cada atajo es una zona cerrada, con una única entrada y una salida de sentido único. Solo la animación controlada de 3.2 s atraviesa la zona: no hay movimiento libre dentro de ella. Ningún personaje puede entrar caminando; el portador choca con el perímetro y no puede activar el acceso. El atajo queda bloqueado durante todo el cruce y el personaje no puede recibir ni transferir la bomba hasta salir. La salida no permite volver a entrar.
+- **RF-03.5** El humano no portador debe pulsar E o Espacio al estar junto a la entrada marcada; estar encima no activa el atajo. Los bots conservan su activación automática al alcanzar esa entrada. Cada atajo es una zona cerrada, con una única entrada y una salida de sentido único. Solo la animación controlada de 3.2 s atraviesa la zona: no hay movimiento libre dentro de ella. Ningún personaje puede entrar caminando; el portador choca con el perímetro y no puede activar el acceso. El atajo queda bloqueado durante todo el cruce y el personaje no puede recibir ni transferir la bomba hasta salir. La salida no permite volver a entrar. Sonido del atajo: ver RF-09b.8.
 - **RF-03.6** Al ser eliminado, el humano termina la partida inmediatamente; no existe modo fantasma.
 - **RF-03.7** La velocidad es modificable por el sistema de efectos mediante multiplicadores positivos, sin tocar `VELOCIDAD_BASE`.
 
@@ -184,7 +184,7 @@ Base compartida (`CharacterBody2D`) para el humano y el número de bots configur
 - **RF-06.1** Cada bloque generado tiene un tipo según las probabilidades de la tabla.
 - **RF-06.2** Al recogerlo, se elige uniformemente un efecto de esa rareza.
 - **RF-06.3** Aparecen hasta `MAX_LUCKY_BLOCKS` (4) a la vez en los puntos del mapa y reaparecen tras `RESPAWN_BLOCK` (15 s).
-- **RF-06.4** Solo el portador humano los ve en el mundo; cualquier bot portador puede recogerlos. Ningún bloque aparece en el minimapa.
+- **RF-06.4** Solo el portador humano los ve en el mundo; cualquier bot portador puede recogerlos. Ningún bloque aparece en el minimapa. Audio de recogida: ver RF-09b.5 y RF-09b.7.
 - **RF-06.5** Al cambiar el portador, la visibilidad de los bloques cambia de inmediato.
 - **RF-06.6** Emite `lucky_block_collected(collector, reward)`.
 
@@ -202,7 +202,7 @@ Base compartida (`CharacterBody2D`) para el humano y el número de bots configur
 | Velocidad +50 % | Plateado | Portador | `DURACION_EFECTO` |
 | Bomba a otro al azar | Dorado | Bomba | Instantáneo |
 
-- **RF-07.1** Aplicar un efecto emite `effect_applied`; retirarlo emite `effect_expired`.
+- **RF-07.1** Aplicar un efecto emite `effect_applied`; retirarlo emite `effect_expired`. Sonido de pérdida: ver RF-09b.6.
 - **RF-07.2** Los efectos de velocidad se aplican como multiplicadores y se retiran restaurando el valor base, sin acumular errores.
 - **RF-07.3** Si se repite el mismo efecto, se reinicia su duración (no se acumula) **[asumido]**.
 - **RF-07.4** Los efectos ligados al portador se retiran al transferir la bomba.
@@ -227,11 +227,38 @@ Base compartida (`CharacterBody2D`) para el humano y el número de bots configur
 
 ## 10. RF-09b Audio
 
-- **RF-09b.1** Sonidos para transferencia, explosión, recogida de bloque (uno por rareza), efecto activado, cuenta final del temporizador (últimos 10 s), victoria y derrota.
+- **RF-09b.1** Sonidos para transferencia, explosión, recogida de bloque (uno por rareza), efecto activado, pérdida de efecto, atajo, cuenta final del temporizador (dura lo que dure el audio definitivo; el umbral de inicio es **[param]**), victoria y derrota.
 - **RF-09b.2** Música procedural de fondo con control de volumen.
 - **RF-09b.3** Los sonidos se reproducen en respuesta a señales, sin código de audio en otros módulos.
 - **RF-09b.4** El audio se inicia tras la primera interacción del usuario (restricción de los navegadores).
 
+### 10.1 SFX de Lucky Blocks
+
+- **RF-09b.5** Existen tres sonidos de recogida distintos, uno por rareza: Cobre (Común), Plateado (Especial) y Dorado (Legendario). El sonido depende de la rareza del bloque, no del efecto obtenido (RF-06.2).
+
+### 10.2 SFX de pérdida de efectos
+
+- **RF-09b.6** Existe un sonido propio de pérdida de efecto temporal, distinto del sonido de efecto activado, asociado a `effect_expired` (RF-07.1). Los efectos instantáneos (+30 s y Bomba a otro al azar) no tienen duración, por lo que no generan este sonido. El sonido de pérdida se reproduce cuando un efecto temporal se retira durante la partida, ya sea por expiración natural de su duración o por retirada al transferirse la bomba (RF-07.4). No se reproduce en estos casos: (a) cuando el portador, humano o bot, es eliminado por la explosión con un efecto temporal activo, donde solo suena la explosión; (b) cuando los efectos se limpian por el fin de la partida (RF-07.6), incluido el reinicio de la partida (`R`, RF-01.7) y la salida al menú desde `PAUSED` mediante `go_to_menu()`.
+
+### 10.3 Reglas de audibilidad según el portador
+
+- **RF-09b.7** El sonido de recogida de un Lucky Block solo se reproduce cuando el humano es el portador de la bomba en el momento de la recogida. Si un bot portador recoge un bloque, el humano no escucha ese evento.
+- **RF-09b.7.1** El filtro por portador lo aplica el AudioManager al recibir `lucky_block_collected`, sin código de audio en otros módulos (RF-09b.3).
+
+### 10.4 SFX de atajos
+
+- **RF-09b.8** Todos los atajos de todos los mapas comparten un único sonido tipo «whoosh». No existen sonidos distintos por atajo ni por tipo de atajo.
+
+**Aceptación**
+- Recoger un bloque de cada rareza (Cobre, Plateado, Dorado) produce tres sonidos distintos.
+- Si el humano es el portador y recoge un bloque, se reproduce el sonido de recogida correspondiente a la rareza del bloque.
+- Si un bot portador recoge un bloque, el humano no escucha el sonido de recogida.
+- Todos los atajos de ambos mapas reproducen el mismo sonido.
+- La pérdida de un efecto temporal suena distinto de su activación.
+- Si un efecto temporal expira de forma natural durante la partida, se reproduce el SFX de pérdida.
+- Si un efecto temporal se retira al transferirse la bomba, se reproduce el SFX de pérdida.
+- Si el portador explota con un efecto temporal activo, solo se reproduce el sonido de explosión, sin SFX de pérdida de efecto.
+- Al finalizar la partida (por resultados, reinicio con `R` o salida al menú desde `PAUSED`), no se reproduce el SFX de pérdida de efecto.
 ---
 
 ## 11. RF-10 Compatibilidad web (transversal)
@@ -260,9 +287,9 @@ Para garantizar el desacoplamiento total de los módulos, el software debe imple
 | **Bomba** | `bomb_exploded(portador)` | BombManager | MatchController, HUD, AudioManager |
 | **Bomba** | `bomb_time_bonus_requested(segundos)` | EffectManager | BombManager |
 | **Bomba** | `bomb_transfer_random_requested` | EffectManager | BombManager |
-| **Bloques** | `lucky_block_collected(bloque, recompensa)` | LuckyBlockSpawner | HUD, AudioManager |
+| **Bloques** | `lucky_block_collected(collector, reward)` | LuckyBlockSpawner | HUD, AudioManager |
 | **Efectos** | `effect_applied(tipo, id, duracion)` | EffectManager | AudioManager, HUD |
-| **Efectos** | `effect_expired(tipo, id)` | EffectManager | AudioManager, HUD |
+| **Efectos** | `effect_expired(tipo, id, motivo)` | EffectManager | AudioManager, HUD |
 | **Audio** | `sfx_requested(sound_name)` | Cualquier Módulo | AudioManager |
 
 ### 12.2 Restricciones del Sistema de Física (Capas de Colisión)
